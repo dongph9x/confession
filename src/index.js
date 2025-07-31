@@ -10,6 +10,8 @@ const fs = require("fs");
 const path = require("path");
 const db = require("./data/database");
 const messageHandler = require("./utils/MessageCommandHandler");
+const logger = require("./utils/logger");
+const config = require("./config/bot");
 const { Kazagumo, Plugins } = require("kazagumo");
 const { Connectors } = require("shoukaku");
 
@@ -45,9 +47,11 @@ const loadSlashCommands = async () => {
 
             if ("data" in command && "execute" in command) {
                 client.commands.set(command.data.name, command);
+                logger.debug(`Loaded command: ${command.data.name}`);
             }
         }
     }
+    logger.info(`Loaded ${client.commands.size} slash commands`);
 };
 
 // Load events
@@ -66,18 +70,21 @@ const loadEvents = async () => {
         } else {
             client.on(event.name, (...args) => event.execute(...args));
         }
+        logger.debug(`Loaded event: ${event.name}`);
     }
+    logger.info(`Loaded ${eventFiles.length} events`);
     return eventFiles.length;
 };
 
 // Khởi tạo bot
 const init = async () => {
     try {
-        console.log("Đang khởi tạo bot...");
+        logger.info("🚀 Starting Confession Bot...");
+        logger.info(`Version: ${config.bot.version}`);
 
         // Khởi tạo database
         await db.init();
-        console.log("Đã khởi tạo database");
+        logger.info("✅ Database initialized");
 
         // Khởi tạo music client
         try {
@@ -105,45 +112,45 @@ const init = async () => {
             
             // Xử lý lỗi Shoukaku
             client.music.shoukaku.on('error', (_, error) => {
-                console.log('⚠️ Lavalink connection error:', error.message);
+                logger.warn('Lavalink connection error:', error.message);
             });
             
             client.music.shoukaku.on('disconnect', (_, reason) => {
-                console.log('⚠️ Lavalink disconnected:', reason);
+                logger.warn('Lavalink disconnected:', reason);
             });
             
-            console.log("✅ Đã khởi tạo music client");
+            logger.info("✅ Music client initialized");
         } catch (error) {
-            console.log("⚠️ Không thể khởi tạo music client (Lavalink server không khả dụng)");
-            console.log("💡 Để sử dụng tính năng music, hãy chạy Lavalink server");
+            logger.warn("⚠️ Could not initialize music client (Lavalink server not available)");
+            logger.info("💡 To use music features, run a Lavalink server");
             global.kazagumo = null;
         }
 
         // Load commands
         await loadSlashCommands();
         await messageHandler.loadCommands();
-        console.log("Đã tải xong các lệnh");
+        logger.info("✅ Commands loaded");
 
         // Load events
         const eventCount = await loadEvents();
-        console.log("Đã tải xong các events");
+        logger.info("✅ Events loaded");
 
         // Đăng nhập vào Discord
         await client.login(process.env.BOT_TOKEN);
-        console.log("Bot đã đăng nhập thành công");
+        logger.info("✅ Bot logged in successfully");
     } catch (error) {
-        console.error("Lỗi trong quá trình khởi tạo:", error);
+        logger.error("Failed to initialize bot", error);
         process.exit(1);
     }
 };
 
 // Xử lý các sự kiện của process
 process.on("unhandledRejection", (error) => {
-    console.error("Lỗi promise chưa được xử lý:", error);
+    logger.error("Unhandled promise rejection:", error);
 });
 
 process.on("SIGINT", () => {
-    console.log("Đang tắt bot...");
+    logger.info("🛑 Shutting down bot...");
     db.close();
     client.destroy();
     process.exit(0);
@@ -153,16 +160,15 @@ process.on("SIGINT", () => {
 init();
 
 client.on("ready", async () => {
-    console.log("\n=== Thông tin Bot ===");
-    console.log(`🤖 Tên Bot: ${client.user.tag}`);
-    console.log(`📝 ID Bot: ${client.user.id}`);
-    console.log(`🏠 Số server: ${client.guilds.cache.size}`);
-    console.log(`📜 Số lệnh: ${client.commands.size}`);
-    console.log(`📋 Số event: ${client.eventCount}`);
-    console.log("=====================\n");
+    logger.info("=== Bot Information ===");
+    logger.info(`🤖 Bot Name: ${client.user.tag}`);
+    logger.info(`📝 Bot ID: ${client.user.id}`);
+    logger.info(`🏠 Servers: ${client.guilds.cache.size}`);
+    logger.info(`📜 Commands: ${client.commands.size}`);
+    logger.info("=====================");
 
     // Tải cấu hình kênh cho mỗi server
-    console.log("=== Đang tải cấu hình kênh ===");
+    logger.info("=== Loading Channel Configuration ===");
     for (const guild of client.guilds.cache.values()) {
         const settings = await db.getGuildSettings(guild.id);
         if (settings) {
@@ -171,14 +177,23 @@ client.on("ready", async () => {
                     settings.confession_channel
                 );
                 if (confessionChannel) {
-                    console.log(
-                        `✅ Đã tải kênh confession cho ${guild.name}: ${confessionChannel.name}`
-                    );
+                    logger.info(`✅ Loaded confession channel for ${guild.name}: ${confessionChannel.name}`);
+                }
+            }
+            if (settings.review_channel) {
+                const reviewChannel = guild.channels.cache.get(
+                    settings.review_channel
+                );
+                if (reviewChannel) {
+                    logger.info(`✅ Loaded review channel for ${guild.name}: ${reviewChannel.name}`);
                 }
             }
         }
     }
-    console.log("=== Tải cấu hình kênh hoàn tất ===\n");
+    logger.info("=== Channel Configuration Complete ===");
+    
+    // Set bot status
+    client.user.setActivity('confessions | /help', { type: 'WATCHING' });
 });
 
 // Xử lý tương tác
@@ -190,11 +205,9 @@ client.on("interactionCreate", async (interaction) => {
 
     try {
         await command.execute(interaction);
+        logger.info(`Command executed: ${interaction.commandName} by ${interaction.user.tag} in ${interaction.guild.name}`);
     } catch (error) {
-        console.error(
-            `Lỗi khi thực hiện lệnh ${interaction.commandName}:`,
-            error
-        );
+        logger.error(`Error executing command ${interaction.commandName}`, error);
         const errorMessage = {
             content: "❌ Đã xảy ra lỗi khi thực hiện lệnh!",
             ephemeral: true,

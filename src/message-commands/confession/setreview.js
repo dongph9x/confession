@@ -1,68 +1,99 @@
-const { PermissionFlagsBits } = require("discord.js");
-const { db } = require("../../utils/database");
+const { EmbedBuilder } = require("discord.js");
+const db = require("../../data/database");
 
 module.exports = {
     name: "setreview",
-    description: "Thiết lập kênh kiểm duyệt confession",
+    description: "Thiết lập kênh review confession (Admin only)",
     async execute(message, args) {
-        if (
-            !message.member.permissions.has(PermissionFlagsBits.Administrator)
-        ) {
-            const reply = await message.reply(
-                "❌ Bạn không có quyền sử dụng lệnh này!"
+        // Kiểm tra quyền
+        if (!message.member.permissions.has('Administrator')) {
+            const errorMsg = await message.channel.send(
+                "❌ Bạn không có quyền để thiết lập kênh review!"
             );
             setTimeout(() => {
-                reply.delete().catch(console.error);
-                message.delete().catch(console.error);
+                errorMsg.delete().catch(() => {});
             }, 5000);
             return;
         }
 
-        const channel = message.mentions.channels.first();
-        if (!channel) {
-            const reply = await message.reply(
-                "❌ Vui lòng tag kênh cần thiết lập! (Ví dụ: !setreview #tên-kênh)"
+        // Xóa tin nhắn gốc
+        try {
+            await message.delete();
+        } catch (error) {
+            console.log("Could not delete message:", error.message);
+        }
+
+        // Kiểm tra argument
+        if (args.length === 0) {
+            const errorMsg = await message.channel.send(
+                "❌ Vui lòng mention kênh review!\nCách sử dụng: `!setreview #kênh-review`"
             );
             setTimeout(() => {
-                reply.delete().catch(console.error);
-                message.delete().catch(console.error);
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        // Lấy kênh từ mention
+        const channelMention = args[0];
+        const channelId = channelMention.replace(/[<#>]/g, '');
+        const channel = message.guild.channels.cache.get(channelId);
+
+        if (!channel) {
+            const errorMsg = await message.channel.send(
+                "❌ Không tìm thấy kênh! Vui lòng mention kênh hợp lệ.\nVí dụ: `!setreview #review-confession`"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        if (!channel.isTextBased()) {
+            const errorMsg = await message.channel.send(
+                "❌ Kênh phải là kênh text!"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
             }, 5000);
             return;
         }
 
         try {
-            const guildConfig = await db.get(
-                "SELECT * FROM guild_configs WHERE guild_id = ?",
-                [message.guildId]
-            );
+            // Thiết lập kênh review
+            await db.setReviewChannel(message.guild.id, channel.id);
 
-            if (!guildConfig) {
-                await db.run(
-                    "INSERT INTO guild_configs (guild_id, review_channel_id) VALUES (?, ?)",
-                    [message.guildId, channel.id]
-                );
-            } else {
-                await db.run(
-                    "UPDATE guild_configs SET review_channel_id = ? WHERE guild_id = ?",
-                    [channel.id, message.guildId]
-                );
-            }
+            const embed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle("✅ Kênh Review Đã Được Thiết Lập")
+                .setDescription(`Kênh review confession đã được thiết lập thành công!`)
+                .addFields(
+                    { name: "👨‍⚖️ Kênh Review", value: channel.toString(), inline: true },
+                    { name: "🎯 Trạng thái", value: "✅ Sẵn sàng nhận confession", inline: true }
+                )
+                .addFields({
+                    name: "📋 Cách sử dụng",
+                    value: "• `!confess <nội dung>` - Gửi confession\n• Confession sẽ được gửi đến kênh review này\n• Click nút để duyệt/từ chối",
+                    inline: false
+                })
+                .setFooter({
+                    text: `Confession Bot • ${message.guild.name}`,
+                    iconURL: message.guild.iconURL(),
+                })
+                .setTimestamp();
 
-            const confirmMessage = await message.channel.send(
-                `✅ Đã thiết lập kênh kiểm duyệt confession: ${channel}`
-            );
+            const successMsg = await message.channel.send({ embeds: [embed] });
             setTimeout(() => {
-                confirmMessage.delete().catch(console.error);
-                message.delete().catch(console.error);
-            }, 5000);
+                successMsg.delete().catch(() => {});
+            }, 10000);
+
         } catch (error) {
-            console.error("Lỗi khi thiết lập kênh kiểm duyệt:", error);
-            const errorMessage = await message.reply(
-                "❌ Đã xảy ra lỗi khi thiết lập kênh kiểm duyệt!"
+            console.error("Lỗi khi thiết lập kênh review:", error);
+            const errorMsg = await message.channel.send(
+                "❌ Đã xảy ra lỗi khi thiết lập kênh review!"
             );
             setTimeout(() => {
-                errorMessage.delete().catch(console.error);
-                message.delete().catch(console.error);
+                errorMsg.delete().catch(() => {});
             }, 5000);
         }
     },
