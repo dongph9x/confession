@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const db = require("../data/mongodb");
+const { getEmojiKeyFromCustomId, updateEmojiButtons } = require("../utils/emojiButtons");
 
 module.exports = {
     name: "interactionCreate",
@@ -12,8 +13,146 @@ module.exports = {
         if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
             await handleConfessionReview(interaction, customId);
         }
+        // Xử lý emoji buttons
+        else if (customId.startsWith('emoji_')) {
+            await handleEmojiButton(interaction, customId);
+        }
     },
 };
+
+async function handleEmojiButton(interaction, customId) {
+    try {
+        await interaction.deferUpdate();
+    } catch (deferError) {
+        console.error("Không thể defer update:", deferError.message);
+        return;
+    }
+
+    const emojiKey = getEmojiKeyFromCustomId(customId);
+    if (!emojiKey) {
+        try {
+            await interaction.followUp({
+                content: "❌ Emoji không hợp lệ!",
+                flags: 64
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
+        return;
+    }
+
+    try {
+        // Lấy confession ID từ message embed
+        const embed = interaction.message.embeds[0];
+        if (!embed || !embed.title) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Không tìm thấy confession!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        // Tìm confession ID từ title (Confession #123)
+        const titleMatch = embed.title.match(/Confession #(\d+)/);
+        if (!titleMatch) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Không thể xác định confession!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        const confessionNumber = parseInt(titleMatch[1]);
+        const confession = await db.getConfessionByNumber(interaction.guild.id, confessionNumber);
+        
+        if (!confession) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Không tìm thấy confession!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        // Toggle emoji reaction
+        const result = await db.toggleEmojiReaction(
+            interaction.guild.id,
+            confession._id,
+            interaction.user.id,
+            emojiKey
+        );
+
+        if (!result.success) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Đã xảy ra lỗi khi xử lý emoji!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        // Lấy emoji counts mới
+        const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
+        
+        // Lấy user reactions để highlight button
+        const userReactions = await db.getUserEmojiReactions(
+            interaction.guild.id,
+            confession._id,
+            interaction.user.id
+        );
+
+        // Cập nhật buttons
+        const updatedComponents = updateEmojiButtons(
+            interaction.message.components,
+            emojiCounts,
+            userReactions
+        );
+
+        // Cập nhật message
+        try {
+            await interaction.editReply({
+                embeds: [embed],
+                components: updatedComponents
+            });
+        } catch (updateError) {
+            console.error("Không thể edit reply:", updateError.message);
+            // Fallback: thử followUp nếu edit thất bại
+            try {
+                await interaction.followUp({
+                    content: `✅ ${result.action === 'added' ? 'Đã thêm' : 'Đã xóa'} emoji ${emojiKey}!`,
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể followUp interaction:", replyError.message);
+            }
+        }
+
+    } catch (error) {
+        console.error('Error handling emoji button:', error);
+        try {
+            await interaction.followUp({
+                content: "❌ Đã xảy ra lỗi khi xử lý emoji!",
+                flags: 64
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
+    }
+}
 
 async function handleConfessionReview(interaction, customId) {
     // Kiểm tra quyền
@@ -32,6 +171,14 @@ async function handleConfessionReview(interaction, customId) {
         if (!confession) {
             return interaction.reply({
                 content: "❌ Không tìm thấy confession này!",
+                flags: 64 // Ephemeral flag
+            });
+        }
+
+        // Kiểm tra xem confession đã được xử lý chưa
+        if (confession.status !== 'pending') {
+            return interaction.reply({
+                content: `❌ Confession này đã được ${confession.status === 'approved' ? 'duyệt' : 'từ chối'} rồi!`,
                 flags: 64 // Ephemeral flag
             });
         }
@@ -85,7 +232,15 @@ async function handleConfessionReview(interaction, customId) {
                 });
             }
 
-            const message = await confessionChannel.send({ embeds: [approvedEmbed] });
+            // Tạo emoji buttons
+            const { createEmojiButtons } = require("../utils/emojiButtons");
+            const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
+            const emojiButtons = createEmojiButtons(emojiCounts);
+
+            const message = await confessionChannel.send({ 
+                embeds: [approvedEmbed],
+                components: emojiButtons
+            });
 
             // Tạo thread cho confession để người dùng có thể bình luận
             const thread = await message.startThread({
@@ -93,11 +248,6 @@ async function handleConfessionReview(interaction, customId) {
                 autoArchiveDuration: 1440, // 24 giờ
                 reason: 'Thread cho confession'
             });
-
-            // Gửi tin nhắn chào mừng trong thread
-            // await thread.send({
-            //     content: `💬 **Bình luận Confession #${(await db.getGuildSettings(interaction.guild.id)).confession_counter}**\n\nHãy để lại cảm xúc và bình luận của bạn về confession này!`
-            // });
 
             // Cập nhật trạng thái trong database với message ID và thread ID
             await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);

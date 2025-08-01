@@ -34,6 +34,21 @@ module.exports = {
             return;
         }
 
+        // Kiểm tra xem user đã có confession đang chờ duyệt chưa
+        const pendingConfessions = await db.getUserPendingConfessions(message.guild.id, message.author.id);
+        if (pendingConfessions.length > 0) {
+            const oldestPending = pendingConfessions[0];
+            const timeAgo = Math.floor((Date.now() - new Date(oldestPending.createdAt).getTime()) / 1000 / 60); // phút
+            
+            const errorMsg = await message.channel.send(
+                `❌ Bạn đã có confession đang chờ duyệt!\n\n\`#${oldestPending._id}\` - ${oldestPending.content.substring(0, 50)}${oldestPending.content.length > 50 ? '...' : ''}\n\n⏰ Đã gửi ${timeAgo} phút trước\n\nVui lòng chờ confession này được duyệt hoặc từ chối trước khi gửi confession mới.`
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 10000);
+            return;
+        }
+
         // Kiểm tra độ dài confession
         if (content.length > config.confession.maxLength) {
             const errorMsg = await message.channel.send(

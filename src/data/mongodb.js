@@ -112,6 +112,15 @@ class MongoDB {
         }).sort({ createdAt: 1 });
     }
 
+    async getUserPendingConfessions(guildId, userId) {
+        const Confession = require('../models/Confession');
+        return await Confession.find({ 
+            guildId, 
+            userId, 
+            status: 'pending' 
+        }).sort({ createdAt: 1 });
+    }
+
     async updateConfessionStatus(confessionId, status, reviewedBy, messageId = null, threadId = null) {
         const Confession = require('../models/Confession');
         const GuildSettings = require('../models/GuildSettings');
@@ -126,10 +135,10 @@ class MongoDB {
             const settings = await GuildSettings.findOneAndUpdate(
                 { guildId: confession.guildId },
                 { $inc: { confessionCounter: 1 } },
-                { new: true }
+                { new: true, upsert: true }
             );
             
-            confessionNumber = settings.confessionCounter;
+            confessionNumber = settings ? settings.confessionCounter : 1;
         }
 
         return await Confession.findByIdAndUpdate(confessionId, {
@@ -209,6 +218,107 @@ class MongoDB {
             total_comments: 0,
             unique_users_commented: 0
         };
+    }
+
+    // Emoji Reaction Methods
+    async addEmojiReaction(guildId, confessionId, userId, emojiKey) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        
+        // Check if user already reacted with this emoji
+        const existingReaction = await EmojiReaction.findOne({
+            guildId,
+            confessionId,
+            userId,
+            emojiKey
+        });
+        
+        if (existingReaction) {
+            return false; // Already reacted
+        }
+        
+        const reaction = new EmojiReaction({
+            guildId,
+            confessionId,
+            userId,
+            emojiKey
+        });
+        
+        await reaction.save();
+        return true;
+    }
+    
+    async removeEmojiReaction(guildId, confessionId, userId, emojiKey) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        
+        const result = await EmojiReaction.deleteOne({
+            guildId,
+            confessionId,
+            userId,
+            emojiKey
+        });
+        
+        return result.deletedCount > 0;
+    }
+    
+    async getEmojiCounts(guildId, confessionId) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        
+        const reactions = await EmojiReaction.aggregate([
+            { $match: { guildId, confessionId } },
+            { $group: { _id: '$emojiKey', count: { $sum: 1 } } }
+        ]);
+        
+        const counts = {};
+        reactions.forEach(reaction => {
+            counts[reaction._id] = reaction.count;
+        });
+        
+        return counts;
+    }
+    
+    async getUserEmojiReactions(guildId, confessionId, userId) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        
+        const reactions = await EmojiReaction.find({
+            guildId,
+            confessionId,
+            userId
+        });
+        
+        return reactions.map(reaction => reaction.emojiKey);
+    }
+    
+    async toggleEmojiReaction(guildId, confessionId, userId, emojiKey) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        
+        // Check if user already reacted
+        const existingReaction = await EmojiReaction.findOne({
+            guildId,
+            confessionId,
+            userId,
+            emojiKey
+        });
+        
+        if (existingReaction) {
+            // Remove reaction
+            await EmojiReaction.deleteOne({
+                guildId,
+                confessionId,
+                userId,
+                emojiKey
+            });
+            return { action: 'removed', success: true };
+        } else {
+            // Add reaction
+            const reaction = new EmojiReaction({
+                guildId,
+                confessionId,
+                userId,
+                emojiKey
+            });
+            await reaction.save();
+            return { action: 'added', success: true };
+        }
     }
 
     // Cleanup

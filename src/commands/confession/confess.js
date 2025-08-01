@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,8 +17,20 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         const content = interaction.options.getString("noidung");
 
+        // Kiểm tra xem user đã có confession đang chờ duyệt chưa
+        const pendingConfessions = await db.getUserPendingConfessions(interaction.guild.id, interaction.user.id);
+        if (pendingConfessions.length > 0) {
+            const oldestPending = pendingConfessions[0];
+            const timeAgo = Math.floor((Date.now() - new Date(oldestPending.createdAt).getTime()) / 1000 / 60); // phút
+            
+            return interaction.editReply({
+                content: `❌ Bạn đã có confession đang chờ duyệt!\n\n\`#${oldestPending._id}\` - ${oldestPending.content.substring(0, 50)}${oldestPending.content.length > 50 ? '...' : ''}\n\n⏰ Đã gửi ${timeAgo} phút trước\n\nVui lòng chờ confession này được duyệt hoặc từ chối trước khi gửi confession mới.`,
+                ephemeral: true,
+            });
+        }
+
         const guildSettings = await db.getGuildSettings(interaction.guild.id);
-        if (!guildSettings?.review_channel) {
+        if (!guildSettings?.reviewChannel) {
             return interaction.editReply({
                 content:
                     "❌ Kênh review confession chưa được thiết lập! Hãy nhờ Admin sử dụng lệnh `/setreviewchannel`",
@@ -27,7 +39,7 @@ module.exports = {
         }
 
         const reviewChannel = interaction.guild.channels.cache.get(
-            guildSettings.review_channel
+            guildSettings.reviewChannel
         );
         if (!reviewChannel) {
             return interaction.editReply({
