@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,7 +11,9 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            const stats = await db.getConfessionStats(interaction.guild.id);
+            const confessionStats = await db.getConfessionStats(interaction.guild.id);
+            const reactionStats = await db.getReactionStats(interaction.guild.id);
+            const commentStats = await db.getCommentStats(interaction.guild.id);
             const guildSettings = await db.getGuildSettings(interaction.guild.id);
 
             const embed = new EmbedBuilder()
@@ -19,11 +21,21 @@ module.exports = {
                 .setTitle("📊 Thống Kê Confession")
                 .setDescription(`Thống kê confession của server **${interaction.guild.name}**`)
                 .addFields(
-                    { name: "📝 Tổng số confession", value: `${stats.total || 0}`, inline: true },
-                    { name: "⏳ Đang chờ duyệt", value: `${stats.pending || 0}`, inline: true },
-                    { name: "✅ Đã duyệt", value: `${stats.approved || 0}`, inline: true },
-                    { name: "❌ Đã từ chối", value: `${stats.rejected || 0}`, inline: true },
-                    { name: "🔢 Số confession hiện tại", value: `${guildSettings?.confession_counter || 0}`, inline: true }
+                    { 
+                        name: "📝 Confessions", 
+                        value: `Tổng: **${confessionStats.total || 0}**\nĐã duyệt: **${confessionStats.approved || 0}**\nChờ duyệt: **${confessionStats.pending || 0}**\nBị từ chối: **${confessionStats.rejected || 0}**`, 
+                        inline: true 
+                    },
+                    { 
+                        name: "❤️ Reactions", 
+                        value: `Confessions có reactions: **${reactionStats.confessions_with_reactions}**\nTổng reactions: **${reactionStats.total_reactions}**\nUsers đã react: **${reactionStats.unique_users_reacted}**`, 
+                        inline: true 
+                    },
+                    { 
+                        name: "💬 Comments", 
+                        value: `Confessions có comments: **${commentStats.confessions_with_comments}**\nTổng comments: **${commentStats.total_comments}**\nUsers đã comment: **${commentStats.unique_users_commented}**`, 
+                        inline: true 
+                    }
                 )
                 .setFooter({
                     text: `Confession Bot • ${interaction.guild.name}`,
@@ -32,8 +44,8 @@ module.exports = {
                 .setTimestamp();
 
             // Thêm thông tin về kênh
-            if (guildSettings?.confession_channel) {
-                const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confession_channel);
+            if (guildSettings?.confessionChannel) {
+                const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confessionChannel);
                 embed.addFields({
                     name: "📢 Kênh confession",
                     value: confessionChannel ? confessionChannel.toString() : "❌ Kênh không tồn tại",
@@ -41,8 +53,8 @@ module.exports = {
                 });
             }
 
-            if (guildSettings?.review_channel) {
-                const reviewChannel = interaction.guild.channels.cache.get(guildSettings.review_channel);
+            if (guildSettings?.reviewChannel) {
+                const reviewChannel = interaction.guild.channels.cache.get(guildSettings.reviewChannel);
                 embed.addFields({
                     name: "👨‍⚖️ Kênh review",
                     value: reviewChannel ? reviewChannel.toString() : "❌ Kênh không tồn tại",

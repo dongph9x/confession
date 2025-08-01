@@ -119,6 +119,12 @@ class MongoDB {
         const confession = await Confession.findById(confessionId);
         if (!confession) return null;
 
+        // Kiểm tra xem confession đã được xử lý chưa
+        if (confession.status !== 'pending') {
+            console.log(`Confession ${confessionId} already processed with status: ${confession.status}`);
+            return null;
+        }
+
         let confessionNumber = confession.confessionNumber;
         
         if (status === 'approved' && confessionNumber === 0) {
@@ -161,6 +167,17 @@ class MongoDB {
         });
     }
 
+    async getRecentConfessions(guildId, userId, seconds = 30) {
+        const Confession = require('../models/Confession');
+        const cutoffTime = new Date(Date.now() - seconds * 1000);
+        
+        return await Confession.find({
+            guildId,
+            userId,
+            createdAt: { $gte: cutoffTime }
+        }).sort({ createdAt: -1 });
+    }
+
     async getConfessionStats(guildId) {
         const Confession = require('../models/Confession');
         const stats = await Confession.aggregate([
@@ -194,20 +211,163 @@ class MongoDB {
         );
     }
 
-    // Placeholder methods for compatibility
+    // Reaction Methods
+    async addReaction(guildId, confessionId, userId, emoji, emojiId = null) {
+        const Reaction = require('../models/Reaction');
+        try {
+            return await Reaction.findOneAndUpdate(
+                { confessionId, userId, emoji },
+                { guildId, confessionId, userId, emoji, emojiId },
+                { upsert: true, new: true }
+            );
+        } catch (error) {
+            if (error.code === 11000) {
+                // Duplicate reaction, return existing
+                return await Reaction.findOne({ confessionId, userId, emoji });
+            }
+            throw error;
+        }
+    }
+
+    async removeReaction(guildId, confessionId, userId, emoji) {
+        const Reaction = require('../models/Reaction');
+        return await Reaction.findOneAndDelete({ confessionId, userId, emoji });
+    }
+
+    // Thêm emoji reaction (cho custom emoji buttons)
+    async addEmojiReaction(guildId, confessionId, userId, emojiKey) {
+        const Reaction = require('../models/Reaction');
+        try {
+            const reaction = new Reaction({
+                guildId,
+                confessionId,
+                userId,
+                emoji: emojiKey,
+                emojiId: null
+            });
+            await reaction.save();
+            return true;
+        } catch (error) {
+            if (error.code === 11000) {
+                // Duplicate reaction, return existing
+                return true;
+            }
+            console.error('Error adding emoji reaction:', error);
+            return false;
+        }
+    }
+
+    // Xóa emoji reaction
+    async removeEmojiReaction(guildId, confessionId, userId, emojiKey) {
+        const Reaction = require('../models/Reaction');
+        return await Reaction.findOneAndDelete({ confessionId, userId, emoji: emojiKey });
+    }
+
+    // Lấy emoji counts cho confession
+    async getEmojiCounts(guildId, confessionId) {
+        const Reaction = require('../models/Reaction');
+        const emojiKeys = ['heart', 'laugh', 'wow', 'sad', 'fire'];
+        const counts = {};
+
+        for (const emojiKey of emojiKeys) {
+            const count = await Reaction.countDocuments({ 
+                guildId, 
+                confessionId, 
+                emoji: emojiKey 
+            });
+            counts[emojiKey] = count;
+        }
+
+        return counts;
+    }
+
+    // Lấy user reactions cho confession
+    async getUserEmojiReactions(guildId, confessionId, userId) {
+        const Reaction = require('../models/Reaction');
+        const reactions = await Reaction.find({ 
+            guildId, 
+            confessionId, 
+            userId 
+        });
+        
+        return reactions.map(r => r.emoji);
+    }
+
     async getReactionStats(guildId) {
+        const Reaction = require('../models/Reaction');
+        const Confession = require('../models/Confession');
+
+        // Lấy thống kê reactions
+        const reactionStats = await Reaction.aggregate([
+            { $match: { guildId } },
+            {
+                $group: {
+                    _id: null,
+                    total_reactions: { $sum: 1 },
+                    unique_users_reacted: { $addToSet: '$userId' }
+                }
+            }
+        ]);
+
+        // Lấy số confessions có reactions
+        const confessionsWithReactions = await Reaction.aggregate([
+            { $match: { guildId } },
+            { $group: { _id: '$confessionId' } },
+            { $count: 'count' }
+        ]);
+
+        const stats = reactionStats[0] || { total_reactions: 0, unique_users_reacted: [] };
+        const confessionsCount = confessionsWithReactions[0]?.count || 0;
+
         return {
-            confessions_with_reactions: 0,
-            total_reactions: 0,
-            unique_users_reacted: 0
+            confessions_with_reactions: confessionsCount,
+            total_reactions: stats.total_reactions,
+            unique_users_reacted: stats.unique_users_reacted.length
         };
     }
 
+    // Comment Methods
+    async addComment(guildId, confessionId, userId, messageId, threadId, content) {
+        const Comment = require('../models/Comment');
+        return await Comment.create({
+            guildId,
+            confessionId,
+            userId,
+            messageId,
+            threadId,
+            content
+        });
+    }
+
     async getCommentStats(guildId) {
+        const Comment = require('../models/Comment');
+
+        // Lấy thống kê comments
+        const commentStats = await Comment.aggregate([
+            { $match: { guildId } },
+            {
+                $group: {
+                    _id: null,
+                    total_comments: { $sum: 1 },
+                    unique_users_commented: { $addToSet: '$userId' }
+                }
+            }
+        ]);
+
+        // Lấy số confessions có comments
+        const confessionsWithComments = await Comment.aggregate([
+            { $match: { guildId } },
+            { $group: { _id: '$confessionId' } },
+            { $count: 'count' }
+        ]);
+
+        const stats = commentStats[0] || { total_comments: 0, unique_users_commented: [] };
+        const confessionsCount = confessionsWithComments[0]?.count || 0;
+
         return {
-            confessions_with_comments: 0,
-            total_comments: 0,
-            unique_users_commented: 0
+            confessions_with_comments: confessionsCount,
+            total_comments: stats.total_comments,
+            unique_users_commented: stats.unique_users_commented.length
         };
     }
 

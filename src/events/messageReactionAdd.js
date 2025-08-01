@@ -1,42 +1,40 @@
 const { EmbedBuilder } = require("discord.js");
-const db = require("../data/database");
+const db = require("../data/mongodb");
 
 module.exports = {
     name: "messageReactionAdd",
     async execute(reaction, user) {
-        // Đảm bảo reaction đã được fetch đầy đủ
-        if (reaction.partial) {
-            try {
-                await reaction.fetch();
-            } catch (error) {
-                console.error('Error fetching reaction:', error);
-                return;
-            }
-        }
+        // Bỏ qua bot reactions
+        if (user.bot) return;
 
         // Kiểm tra xem message có phải là confession không
-        if (!reaction.message.embeds || reaction.message.embeds.length === 0) return;
-        
         const embed = reaction.message.embeds[0];
-        if (!embed.title || !embed.title.includes('Confession #')) return;
+        if (!embed || !embed.title || !embed.title.includes('Confession #')) {
+            return;
+        }
 
-        // Lấy confession number từ title
-        const confessionNumber = embed.title.match(/Confession #(\d+)/)?.[1];
-        if (!confessionNumber) return;
-
+        // Xóa Discord reaction ngay lập tức
         try {
-            // Tìm confession trong database
-            const confession = await db.getConfessionByNumber(reaction.message.guild.id, parseInt(confessionNumber));
-            if (!confession) return;
-
-            // Log reaction
-            console.log(`Reaction added to confession #${confessionNumber}: ${reaction.emoji.name} by ${user.tag}`);
-
-            // Có thể thêm logic xử lý reaction ở đây
-            // Ví dụ: Thống kê reaction, thông báo cho người gửi confession, etc.
-
+            await reaction.remove();
+            console.log(`🗑️ Removed Discord reaction from confession: ${reaction.emoji.name}`);
         } catch (error) {
-            console.error('Error handling reaction:', error);
+            console.error('Error removing Discord reaction:', error.message);
+        }
+
+        // Thông báo cho user (optional)
+        try {
+            const channel = reaction.message.channel;
+            const notification = await channel.send({
+                content: `⚠️ <@${user.id}>, vui lòng sử dụng emoji buttons bên dưới thay vì reactions của Discord!`,
+                flags: 64 // Ephemeral
+            });
+            
+            // Xóa thông báo sau 5 giây
+            setTimeout(() => {
+                notification.delete().catch(() => {});
+            }, 5000);
+        } catch (error) {
+            console.error('Error sending notification:', error.message);
         }
     },
 };

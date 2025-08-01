@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: confession-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password123}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-confession_bot}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - confession-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Discord Bot
+  bot:
+    build: .
+    container_name: confession-bot
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password123}@mongodb:27017/${MONGO_DATABASE:-confession_bot}?authSource=admin
+      - LAVALINK_URL=${LAVALINK_URL:-localhost:2333}
+      - LAVALINK_AUTH=${LAVALINK_AUTH:-youshallnotpass}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./src/logs:/app/src/logs
+    networks:
+      - confession-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Bot health check')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Lavalink Music Server
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: confession-lavalink
+    restart: unless-stopped
+    environment:
+      - SERVER_PORT=${LAVALINK_PORT:-2333}
+      - LAVALINK_SERVER_PASSWORD=${LAVALINK_AUTH:-youshallnotpass}
+    ports:
+      - "${LAVALINK_PORT:-2333}:2333"
+    volumes:
+      - ./lavalink-config.yml:/opt/Lavalink/application.yml
+    networks:
+      - confession-network
+    profiles:
+      - music
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  confession-network:
+    driver: bridge 

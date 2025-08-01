@@ -5,6 +5,7 @@ const config = require("../../config/bot");
 module.exports = {
     name: "confess",
     description: "Gửi một confession ẩn danh",
+    cooldown: 5, // 5 giây cooldown
     async execute(message, args) {
         // Xóa tin nhắn gốc với error handling
         try {
@@ -80,6 +81,24 @@ module.exports = {
         }
 
         try {
+            // Kiểm tra confession gần đây để tránh duplicate
+            const recentConfessions = await db.getRecentConfessions(message.guild.id, message.author.id, 30); // 30 giây
+            const duplicateConfession = recentConfessions.find(conf => 
+                conf.content === content && 
+                conf.isAnonymous === isAnonymous &&
+                Date.now() - new Date(conf.createdAt).getTime() < 30000 // 30 giây
+            );
+
+            if (duplicateConfession) {
+                const errorMsg = await message.channel.send(
+                    "⚠️ Bạn vừa gửi confession tương tự! Vui lòng đợi một chút hoặc thay đổi nội dung."
+                );
+                setTimeout(() => {
+                    errorMsg.delete().catch(() => {});
+                }, 5000);
+                return;
+            }
+
             // Lưu confession vào database với thông tin ẩn danh
             const confessionId = await db.addConfession(
                 message.guild.id,

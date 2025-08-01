@@ -1,10 +1,30 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const db = require("../data/mongodb");
+const { getEmojiKeyFromCustomId, updateEmojiButtons } = require("../utils/emojiButtons");
+
+// Track processed interactions to prevent duplicates
+const processedInteractions = new Set();
 
 module.exports = {
-    name: "interactionCreate",
+    name: "buttonInteractionCreate",
     async execute(interaction) {
         if (!interaction.isButton()) return;
+
+        // Prevent duplicate processing
+        const interactionKey = `${interaction.id}-${interaction.customId}`;
+        if (processedInteractions.has(interactionKey)) {
+            console.log(`Duplicate interaction detected: ${interactionKey}`);
+            return;
+        }
+        processedInteractions.add(interactionKey);
+
+        // Clean up old interactions (keep only last 1000)
+        if (processedInteractions.size > 1000) {
+            const iterator = processedInteractions.values();
+            for (let i = 0; i < 500; i++) {
+                processedInteractions.delete(iterator.next().value);
+            }
+        }
 
         const { customId } = interaction;
         
@@ -12,8 +32,129 @@ module.exports = {
         if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
             await handleConfessionReview(interaction, customId);
         }
+        // Xử lý emoji buttons
+        else if (customId.startsWith('emoji_')) {
+            await handleEmojiButton(interaction, customId);
+        }
     },
 };
+
+async function handleEmojiButton(interaction, customId) {
+    // Defer reply ngay lập tức để tránh timeout
+    try {
+        await interaction.deferUpdate();
+    } catch (deferError) {
+        console.error("Không thể defer update:", deferError.message);
+        return;
+    }
+
+    const emojiKey = getEmojiKeyFromCustomId(customId);
+    if (!emojiKey) {
+        try {
+            await interaction.followUp({
+                content: "❌ Emoji không hợp lệ!",
+                flags: 64
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
+        return;
+    }
+
+    try {
+        // Lấy confession ID từ message embed
+        const embed = interaction.message.embeds[0];
+        if (!embed || !embed.title) {
+            return interaction.reply({
+                content: "❌ Không tìm thấy confession!",
+                flags: 64
+            });
+        }
+
+        // Tìm confession ID từ title (Confession #123)
+        const titleMatch = embed.title.match(/Confession #(\d+)/);
+        if (!titleMatch) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Không thể xác định confession!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        const confessionNumber = parseInt(titleMatch[1]);
+        const confession = await db.getConfessionByNumber(interaction.guild.id, confessionNumber);
+        
+        if (!confession) {
+            try {
+                await interaction.followUp({
+                    content: "❌ Không tìm thấy confession!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
+            return;
+        }
+
+        // Kiểm tra xem user đã react chưa
+        const userReactions = await db.getUserEmojiReactions(interaction.guild.id, confession._id, interaction.user.id);
+        const hasReacted = userReactions.includes(emojiKey);
+
+        if (hasReacted) {
+            // Xóa reaction
+            await db.removeEmojiReaction(interaction.guild.id, confession._id, interaction.user.id, emojiKey);
+            userReactions.splice(userReactions.indexOf(emojiKey), 1);
+        } else {
+            // Thêm reaction
+            await db.addEmojiReaction(interaction.guild.id, confession._id, interaction.user.id, emojiKey);
+            userReactions.push(emojiKey);
+        }
+
+        // Lấy emoji counts mới
+        const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
+
+        // Cập nhật buttons
+        const updatedComponents = updateEmojiButtons(
+            interaction.message.components,
+            emojiCounts,
+            userReactions
+        );
+
+        // Cập nhật message
+        try {
+            await interaction.editReply({
+                embeds: [embed],
+                components: updatedComponents
+            });
+        } catch (updateError) {
+            console.error("Không thể edit reply:", updateError.message);
+            // Fallback: thử followUp nếu edit thất bại
+            try {
+                await interaction.followUp({
+                    content: "✅ Reaction đã được cập nhật!",
+                    flags: 64
+                });
+            } catch (replyError) {
+                console.error("Không thể followUp interaction:", replyError.message);
+            }
+        }
+
+    } catch (error) {
+        console.error('Error handling emoji button:', error);
+        try {
+            await interaction.reply({
+                content: "❌ Đã xảy ra lỗi khi xử lý emoji!",
+                flags: 64
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
+    }
+}
 
 async function handleConfessionReview(interaction, customId) {
     // Kiểm tra quyền
@@ -32,6 +173,14 @@ async function handleConfessionReview(interaction, customId) {
         if (!confession) {
             return interaction.reply({
                 content: "❌ Không tìm thấy confession này!",
+                flags: 64 // Ephemeral flag
+            });
+        }
+
+        // Kiểm tra xem confession đã được xử lý chưa
+        if (confession.status !== 'pending') {
+            return interaction.reply({
+                content: `❌ Confession này đã được ${confession.status === 'approved' ? 'duyệt' : 'từ chối'} rồi!`,
                 flags: 64 // Ephemeral flag
             });
         }
@@ -85,7 +234,15 @@ async function handleConfessionReview(interaction, customId) {
                 });
             }
 
-            const message = await confessionChannel.send({ embeds: [approvedEmbed] });
+            // Tạo emoji buttons
+            const { createEmojiButtons } = require("../utils/emojiButtons");
+            const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
+            const emojiButtons = createEmojiButtons(emojiCounts);
+
+            const message = await confessionChannel.send({ 
+                embeds: [approvedEmbed],
+                components: emojiButtons
+            });
 
             // Tạo thread cho confession để người dùng có thể bình luận
             const thread = await message.startThread({
@@ -100,7 +257,20 @@ async function handleConfessionReview(interaction, customId) {
             // });
 
             // Cập nhật trạng thái trong database với message ID và thread ID
-            await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
+            const updatedConfession = await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
+            
+            // Kiểm tra xem update có thành công không
+            if (!updatedConfession || updatedConfession.status !== 'approved') {
+                console.error('Failed to update confession status');
+                // Xóa message đã gửi nếu update thất bại
+                try {
+                    await message.delete();
+                    await thread.delete();
+                } catch (deleteError) {
+                    console.error('Failed to delete message/thread:', deleteError.message);
+                }
+                return;
+            }
 
             // Cập nhật embed gốc
             const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
@@ -136,10 +306,14 @@ async function handleConfessionReview(interaction, customId) {
                 components: [disabledButtons]
             });
 
-            await interaction.reply({
-                content: `✅ Đã duyệt confession #${confessionId}!`,
-                flags: 64 // Ephemeral flag
-            });
+            try {
+                await interaction.reply({
+                    content: `✅ Đã duyệt confession #${confessionId}!`,
+                    flags: 64 // Ephemeral flag
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
 
             // Thông báo cho người gửi
             try {
@@ -187,10 +361,14 @@ async function handleConfessionReview(interaction, customId) {
                 components: [disabledButtons]
             });
 
-            await interaction.reply({
-                content: `❌ Đã từ chối confession #${confessionId}!`,
-                flags: 64 // Ephemeral flag
-            });
+            try {
+                await interaction.reply({
+                    content: `❌ Đã từ chối confession #${confessionId}!`,
+                    flags: 64 // Ephemeral flag
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
 
             // Thông báo cho người gửi
             try {
@@ -204,17 +382,25 @@ async function handleConfessionReview(interaction, customId) {
 
         } else if (action === 'edit') {
             // Hiển thị modal để chỉnh sửa
-            await interaction.reply({
-                content: "✏️ Tính năng chỉnh sửa sẽ được phát triển trong phiên bản tiếp theo!",
-                flags: 64 // Ephemeral flag
-            });
+            try {
+                await interaction.reply({
+                    content: "✏️ Tính năng chỉnh sửa sẽ được phát triển trong phiên bản tiếp theo!",
+                    flags: 64 // Ephemeral flag
+                });
+            } catch (replyError) {
+                console.error("Không thể reply interaction:", replyError.message);
+            }
         }
 
     } catch (error) {
         console.error("Lỗi khi xử lý review confession:", error);
-        await interaction.reply({
-            content: "❌ Đã xảy ra lỗi khi xử lý review!",
-            flags: 64 // Ephemeral flag
-        });
+        try {
+            await interaction.reply({
+                content: "❌ Đã xảy ra lỗi khi xử lý review!",
+                flags: 64 // Ephemeral flag
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
     }
 } 

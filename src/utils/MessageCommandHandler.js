@@ -6,6 +6,7 @@ const db = require("../data/mongodb");
 class MessageCommandHandler {
     constructor() {
         this.commands = new Collection();
+        this.cooldowns = new Collection();
     }
 
     async loadCommands() {
@@ -62,6 +63,17 @@ class MessageCommandHandler {
 
         if (!command) return;
 
+        // Kiểm tra cooldown
+        if (command.cooldown) {
+            const { valid, timeLeft } = this.checkCooldown(message.author.id, command.name, command.cooldown);
+            if (!valid) {
+                return message.reply({
+                    content: `⏰ Vui lòng đợi ${timeLeft.toFixed(1)} giây trước khi sử dụng lệnh này!`,
+                    flags: 64
+                });
+            }
+        }
+
         try {
             await command.execute(message, args);
         } catch (error) {
@@ -75,6 +87,29 @@ class MessageCommandHandler {
                 console.error("Error sending error message:", replyError);
             }
         }
+    }
+
+    checkCooldown(userId, commandName, cooldownSeconds) {
+        const key = `${userId}-${commandName}`;
+        const now = Date.now();
+        const timestamps = this.cooldowns.get(key);
+        
+        if (!timestamps) {
+            this.cooldowns.set(key, [now]);
+            return { valid: true, timeLeft: 0 };
+        }
+
+        const validTimestamps = timestamps.filter(timestamp => now - timestamp < cooldownSeconds * 1000);
+        this.cooldowns.set(key, validTimestamps);
+
+        if (validTimestamps.length > 0) {
+            const timeLeft = cooldownSeconds - (now - validTimestamps[0]) / 1000;
+            return { valid: false, timeLeft };
+        }
+
+        validTimestamps.push(now);
+        this.cooldowns.set(key, validTimestamps);
+        return { valid: true, timeLeft: 0 };
     }
 }
 

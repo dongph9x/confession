@@ -1,0 +1,55 @@
+server:
+  port: 2333
+  address: 0.0.0.0
+
+lavalink:
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: true
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+    gcwEnabled: false
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    httpConfig:
+      proxyUrl: ""
+    ratelimit:
+      ipBlocks: []
+      excludedIps: []
+      strategy: "RotateOnBan"
+      searchTriggersFail: true
+      retryLimit: -1
+    youtubeConfig:
+      email: ""
+      password: ""
+    metrics:
+      prometheus:
+        enabled: false
+        endpoint: /metrics
+    sentry:
+      dsn: ""
+    logging:
+      file:
+        maxHistory: 30
+        maxSize: 1GB
+      path: ./logs/
+    plugins:
+      lavasrc:
+        providers:
+          - "ytsearch:%QUERY%"
+          - "ytmsearch:%QUERY%"
+          - "ytsearch:%QUERY%"
+          - "ytmsearch:%QUERY%"
+        lavalink:
+          - host: localhost
+            port: 2333
+            password: "youshallnotpass"
+            secure: false 

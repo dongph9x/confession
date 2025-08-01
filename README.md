@@ -23,6 +23,9 @@
 
 ### 📊 Statistics & Analytics
 - **Real-time statistics** - View confession counts, approval rates, and more
+- **Reaction tracking** - Track reactions on confessions with detailed analytics
+- **Comment tracking** - Monitor comments in confession threads
+- **Advanced analytics** - Comprehensive statistics for reactions and comments
 - **Server analytics** - Track confession trends over time
 - **User activity** - Monitor user participation
 
