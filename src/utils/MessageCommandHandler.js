@@ -1,7 +1,7 @@
 const { Collection } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
-const db = require("../data/database");
+const db = require("../data/mongodb");
 
 class MessageCommandHandler {
     constructor() {
@@ -66,12 +66,14 @@ class MessageCommandHandler {
             await command.execute(message, args);
         } catch (error) {
             console.error(error);
-            message
-                .reply({
+            try {
+                await message.reply({
                     content: "❌ There was an error executing that command!",
-                    ephemeral: true,
-                })
-                .catch(console.error);
+                    flags: 64 // Ephemeral flag
+                });
+            } catch (replyError) {
+                console.error("Error sending error message:", replyError);
+            }
         }
     }
 }

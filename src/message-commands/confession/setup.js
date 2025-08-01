@@ -1,38 +1,35 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require("discord.js");
-const db = require("../../data/database");
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const db = require("../../data/mongodb");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("confessionsetup")
-        .setDescription("Thiết lập kênh confession và review với select menu")
-        .addStringOption(option =>
-            option.setName("action")
-                .setDescription("Chọn hành động")
-                .setRequired(true)
-                .addChoices(
-                    { name: "📝 Thiết lập kênh confession", value: "confession" },
-                    { name: "👨‍⚖️ Thiết lập kênh review", value: "review" },
-                    { name: "⚙️ Xem cấu hình hiện tại", value: "config" },
-                    { name: "🔄 Thiết lập cả hai", value: "both" }
-                )
-        ),
-
-    async execute(interaction) {
+    name: "confessionsetup",
+    description: "Thiết lập kênh confession và review với select menu",
+    async execute(message, args) {
         // Kiểm tra quyền
-        if (!interaction.member.permissions.has("Administrator")) {
-            return interaction.reply({
-                content: "❌ Bạn cần quyền Administrator để sử dụng lệnh này!",
-                ephemeral: true
-            });
+        if (!message.member.permissions.has("Administrator")) {
+            const errorMsg = await message.channel.send(
+                "❌ Bạn cần quyền Administrator để sử dụng lệnh này!"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
         }
 
-        const action = interaction.options.getString("action");
+        // Xóa tin nhắn gốc
+        try {
+            await message.delete();
+        } catch (error) {
+            console.log("Could not delete message:", error.message);
+        }
+
+        const action = args[0] || "config";
 
         if (action === "config") {
             // Hiển thị cấu hình hiện tại
-            const settings = await db.getGuildSettings(interaction.guild.id);
-            const confessionChannel = settings.confession_channel ? `<#${settings.confession_channel}>` : "❌ Chưa thiết lập";
-            const reviewChannel = settings.review_channel ? `<#${settings.review_channel}>` : "❌ Chưa thiết lập";
+            const settings = await db.getGuildSettings(message.guild.id);
+            const confessionChannel = settings?.confessionChannel ? `<#${settings.confessionChannel}>` : "❌ Chưa thiết lập";
+            const reviewChannel = settings?.reviewChannel ? `<#${settings.reviewChannel}>` : "❌ Chưa thiết lập";
 
             const configEmbed = new EmbedBuilder()
                 .setTitle("⚙️ Cấu hình Confession Bot")
@@ -40,16 +37,16 @@ module.exports = {
                 .addFields(
                     { name: "📝 Kênh Confession", value: confessionChannel, inline: true },
                     { name: "👨‍⚖️ Kênh Review", value: reviewChannel, inline: true },
-                    { name: "📊 Confession Counter", value: `${settings.confession_counter || 0}`, inline: true }
+                    { name: "📊 Confession Counter", value: `${settings?.confessionCounter || 0}`, inline: true }
                 )
                 .setFooter({ text: "Confession Bot • Facebook Style" })
                 .setTimestamp();
 
-            return interaction.reply({ embeds: [configEmbed], ephemeral: true });
+            return message.channel.send({ embeds: [configEmbed] });
         }
 
         // Tạo select menu cho channels
-        const channels = interaction.guild.channels.cache
+        const channels = message.guild.channels.cache
             .filter(channel => channel.type === 0) // Text channels only
             .map(channel => ({
                 label: `#${channel.name}`,
@@ -58,10 +55,13 @@ module.exports = {
             }));
 
         if (channels.length === 0) {
-            return interaction.reply({
-                content: "❌ Không tìm thấy kênh text nào trong server!",
-                ephemeral: true
-            });
+            const errorMsg = await message.channel.send(
+                "❌ Không tìm thấy kênh text nào trong server!"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
         }
 
         // Tạo select menu
@@ -84,7 +84,11 @@ module.exports = {
                 break;
             case "both":
                 title = "🔄 Thiết lập cả hai kênh";
-                description = "Chọn kênh confession trước, sau đó chọn kênh review:";
+                description = "Chọn kênh cho cả confession và review:";
+                break;
+            default:
+                title = "⚙️ Thiết lập Confession Bot";
+                description = "Chọn hành động:";
                 break;
         }
 
@@ -95,10 +99,9 @@ module.exports = {
             .setFooter({ text: "Confession Bot • Facebook Style" })
             .setTimestamp();
 
-        await interaction.reply({
+        await message.channel.send({
             embeds: [setupEmbed],
-            components: [row],
-            ephemeral: true
+            components: [row]
         });
     },
 }; 

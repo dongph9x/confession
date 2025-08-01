@@ -17,6 +17,7 @@ class Database {
             review_channel TEXT,
             prefix TEXT DEFAULT '!',
             confession_counter INTEGER DEFAULT 0,
+            anonymous_mode INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
@@ -25,6 +26,7 @@ class Database {
             guild_id TEXT,
             user_id TEXT,
             content TEXT,
+            is_anonymous INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending',
             confession_number INTEGER DEFAULT 0,
             message_id TEXT,
@@ -80,6 +82,12 @@ class Database {
         }
 
         try {
+            await this.run("ALTER TABLE confessions ADD COLUMN is_anonymous INTEGER DEFAULT 0");
+        } catch (error) {
+            // Cột đã tồn tại, bỏ qua
+        }
+
+        try {
             await this.run("ALTER TABLE guild_settings ADD COLUMN review_channel TEXT");
         } catch (error) {
             // Cột đã tồn tại, bỏ qua
@@ -87,6 +95,12 @@ class Database {
 
         try {
             await this.run("ALTER TABLE guild_settings ADD COLUMN confession_counter INTEGER DEFAULT 0");
+        } catch (error) {
+            // Cột đã tồn tại, bỏ qua
+        }
+
+        try {
+            await this.run("ALTER TABLE guild_settings ADD COLUMN anonymous_mode INTEGER DEFAULT 0");
         } catch (error) {
             // Cột đã tồn tại, bỏ qua
         }
@@ -124,11 +138,24 @@ class Database {
         );
     }
 
+    async setAnonymousMode(guildId, enabled) {
+        await this.run(
+            "INSERT INTO guild_settings (guild_id, anonymous_mode) VALUES (?, ?) " +
+                "ON CONFLICT(guild_id) DO UPDATE SET anonymous_mode = ?",
+            [guildId, enabled ? 1 : 0, enabled ? 1 : 0]
+        );
+    }
+
+    async getAnonymousMode(guildId) {
+        const settings = await this.getGuildSettings(guildId);
+        return settings ? settings.anonymous_mode === 1 : false;
+    }
+
     // Confession Methods
-    async addConfession(guildId, userId, content) {
+    async addConfession(guildId, userId, content, isAnonymous = false) {
         const result = await this.run(
-            "INSERT INTO confessions (guild_id, user_id, content) VALUES (?, ?, ?)",
-            [guildId, userId, content]
+            "INSERT INTO confessions (guild_id, user_id, content, is_anonymous) VALUES (?, ?, ?, ?)",
+            [guildId, userId, content, isAnonymous ? 1 : 0]
         );
         
         // Lấy ID của confession vừa thêm vào
@@ -196,6 +223,26 @@ class Database {
             [guildId]
         );
         return stats;
+    }
+
+    // Reaction Methods (Placeholder - sẽ implement sau)
+    async getReactionStats(guildId) {
+        // Placeholder cho reaction stats
+        return {
+            confessions_with_reactions: 0,
+            total_reactions: 0,
+            unique_users_reacted: 0
+        };
+    }
+
+    // Comment Methods (Placeholder - sẽ implement sau)
+    async getCommentStats(guildId) {
+        // Placeholder cho comment stats
+        return {
+            confessions_with_comments: 0,
+            total_comments: 0,
+            unique_users_commented: 0
+        };
     }
 
     // Music Settings Methods

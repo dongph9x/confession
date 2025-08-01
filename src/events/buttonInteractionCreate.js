@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const db = require("../data/database");
+const db = require("../data/mongodb");
 
 module.exports = {
     name: "interactionCreate",
@@ -20,7 +20,7 @@ async function handleConfessionReview(interaction, customId) {
     if (!interaction.member.permissions.has('ManageMessages')) {
         return interaction.reply({
             content: "❌ Bạn không có quyền để duyệt confession!",
-            ephemeral: true
+            flags: 64 // Ephemeral flag
         });
     }
 
@@ -32,7 +32,7 @@ async function handleConfessionReview(interaction, customId) {
         if (!confession) {
             return interaction.reply({
                 content: "❌ Không tìm thấy confession này!",
-                ephemeral: true
+                flags: 64 // Ephemeral flag
             });
         }
 
@@ -40,49 +40,64 @@ async function handleConfessionReview(interaction, customId) {
         
         if (action === 'approve') {
             // Duyệt confession
-            const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confession_channel);
+            const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confessionChannel);
             if (!confessionChannel) {
                 return interaction.reply({
                     content: "❌ Kênh confession chưa được thiết lập!",
-                    ephemeral: true
+                    flags: 64 // Ephemeral flag
                 });
             }
 
             // Lấy thông tin người gửi confession
-            const confessionAuthor = await interaction.client.users.fetch(confession.user_id);
+            const confessionAuthor = await interaction.client.users.fetch(confession.userId);
+            
+            // Kiểm tra chế độ ẩn danh từ confession
+            const isAnonymous = confession.isAnonymous;
 
             // Tạo embed cho confession đã duyệt
             const approvedEmbed = new EmbedBuilder()
                 .setColor(0x00FF00)
-                .setTitle("💝 Confession #" + (await db.getGuildSettings(interaction.guild.id)).confession_counter + 1)
+                .setTitle("💝 Confession #" + (guildSettings.confessionCounter + 1))
                 .setDescription(confession.content)
                 .addFields(
-                    { name: "👤 Người gửi", value: `<@${confession.user_id}>`, inline: true },
-                    { name: "⏰ Thời gian", value: `<t:${Math.floor(new Date(confession.created_at).getTime() / 1000)}:R>`, inline: true }
+                    { 
+                        name: "👤 Người gửi", 
+                        value: isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`, 
+                        inline: true 
+                    },
+                    { 
+                        name: "⏰ Thời gian", 
+                        value: `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`, 
+                        inline: true 
+                    }
                 )
-                .setAuthor({
-                    name: confessionAuthor.username,
-                    iconURL: confessionAuthor.displayAvatarURL()
-                })
                 .setFooter({
                     text: `Confession Bot • ${interaction.guild.name}`,
                     iconURL: interaction.guild.iconURL(),
                 })
                 .setTimestamp();
 
+            // Chỉ hiển thị author nếu không ở chế độ ẩn danh
+            if (!isAnonymous) {
+                approvedEmbed.setAuthor({
+                    name: confessionAuthor.username,
+                    iconURL: confessionAuthor.displayAvatarURL()
+                });
+            }
+
             const message = await confessionChannel.send({ embeds: [approvedEmbed] });
 
             // Tạo thread cho confession để người dùng có thể bình luận
             const thread = await message.startThread({
-                name: `💬 Bình luận Confession #${(await db.getGuildSettings(interaction.guild.id)).confession_counter}`,
+                name: `💬 Bình luận Confession #${guildSettings.confessionCounter + 1}`,
                 autoArchiveDuration: 1440, // 24 giờ
                 reason: 'Thread cho confession'
             });
 
             // Gửi tin nhắn chào mừng trong thread
-            await thread.send({
-                content: `💬 **Bình luận Confession #${(await db.getGuildSettings(interaction.guild.id)).confession_counter}**\n\nHãy để lại cảm xúc và bình luận của bạn về confession này!`
-            });
+            // await thread.send({
+            //     content: `💬 **Bình luận Confession #${(await db.getGuildSettings(interaction.guild.id)).confession_counter}**\n\nHãy để lại cảm xúc và bình luận của bạn về confession này!`
+            // });
 
             // Cập nhật trạng thái trong database với message ID và thread ID
             await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
@@ -123,12 +138,12 @@ async function handleConfessionReview(interaction, customId) {
 
             await interaction.reply({
                 content: `✅ Đã duyệt confession #${confessionId}!`,
-                ephemeral: true
+                flags: 64 // Ephemeral flag
             });
 
             // Thông báo cho người gửi
             try {
-                const user = await interaction.client.users.fetch(confession.user_id);
+                const user = await interaction.client.users.fetch(confession.userId);
                 await user.send({
                     content: `🎉 Confession của bạn đã được duyệt và đăng lên server **${interaction.guild.name}**!`
                 });
@@ -174,12 +189,12 @@ async function handleConfessionReview(interaction, customId) {
 
             await interaction.reply({
                 content: `❌ Đã từ chối confession #${confessionId}!`,
-                ephemeral: true
+                flags: 64 // Ephemeral flag
             });
 
             // Thông báo cho người gửi
             try {
-                const user = await interaction.client.users.fetch(confession.user_id);
+                const user = await interaction.client.users.fetch(confession.userId);
                 await user.send({
                     content: `😔 Confession của bạn đã bị từ chối trên server **${interaction.guild.name}**.`
                 });
@@ -191,7 +206,7 @@ async function handleConfessionReview(interaction, customId) {
             // Hiển thị modal để chỉnh sửa
             await interaction.reply({
                 content: "✏️ Tính năng chỉnh sửa sẽ được phát triển trong phiên bản tiếp theo!",
-                ephemeral: true
+                flags: 64 // Ephemeral flag
             });
         }
 
@@ -199,7 +214,7 @@ async function handleConfessionReview(interaction, customId) {
         console.error("Lỗi khi xử lý review confession:", error);
         await interaction.reply({
             content: "❌ Đã xảy ra lỗi khi xử lý review!",
-            ephemeral: true
+            flags: 64 // Ephemeral flag
         });
     }
 } 

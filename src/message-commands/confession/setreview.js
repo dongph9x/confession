@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     name: "setreview",

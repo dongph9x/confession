@@ -1,9 +1,9 @@
-const { EmbedBuilder } = require("discord.js");
-const db = require("../../data/database");
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const db = require("../../data/mongodb");
 
 module.exports = {
-    name: "confessconfig",
-    description: "Xem cấu hình confession hiện tại",
+    name: "confessionconfig",
+    description: "Quản lý cấu hình confession với select menu",
     async execute(message, args) {
         // Xóa tin nhắn gốc
         try {
@@ -12,80 +12,93 @@ module.exports = {
             console.log("Could not delete message:", error.message);
         }
 
-        try {
-            const guildSettings = await db.getGuildSettings(message.guild.id);
-            
-            const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
-                .setTitle("⚙️ Cấu hình Confession")
-                .setDescription(`Cấu hình cho server **${message.guild.name}**`)
-                .setFooter({
-                    text: `Confession Bot • ${message.guild.name}`,
-                    iconURL: message.guild.iconURL(),
-                })
-                .setTimestamp();
+        const guildSettings = await db.getGuildSettings(message.guild.id);
+        const anonymousMode = await db.getAnonymousMode(message.guild.id);
 
-            // Thông tin kênh confession
-            if (guildSettings?.confession_channel) {
-                const confessionChannel = message.guild.channels.cache.get(guildSettings.confession_channel);
-                embed.addFields({
-                    name: "📢 Kênh Confession",
-                    value: confessionChannel ? confessionChannel.toString() : "❌ Kênh không tồn tại",
+        // Tạo embed hiển thị cấu hình hiện tại
+        const configEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle("⚙️ Cấu hình Confession Bot")
+            .setDescription("Quản lý cài đặt confession cho server")
+            .addFields(
+                {
+                    name: "📝 Kênh Confession",
+                    value: guildSettings?.confessionChannel 
+                        ? `<#${guildSettings.confessionChannel}>` 
+                        : "❌ Chưa thiết lập",
                     inline: true
-                });
-            } else {
-                embed.addFields({
-                    name: "📢 Kênh Confession",
-                    value: "❌ Chưa thiết lập",
-                    inline: true
-                });
-            }
-
-            // Thông tin kênh review
-            if (guildSettings?.review_channel) {
-                const reviewChannel = message.guild.channels.cache.get(guildSettings.review_channel);
-                embed.addFields({
+                },
+                {
                     name: "👨‍⚖️ Kênh Review",
-                    value: reviewChannel ? reviewChannel.toString() : "❌ Kênh không tồn tại",
+                    value: guildSettings?.reviewChannel 
+                        ? `<#${guildSettings.reviewChannel}>` 
+                        : "❌ Chưa thiết lập",
                     inline: true
-                });
-            } else {
-                embed.addFields({
-                    name: "👨‍⚖️ Kênh Review",
-                    value: "❌ Chưa thiết lập",
+                },
+                {
+                    name: "📊 Confession Counter",
+                    value: guildSettings?.confessionCounter?.toString() || "0",
                     inline: true
-                });
-            }
+                },
+                {
+                    name: "🕵️ Chế độ Ẩn danh",
+                    value: anonymousMode ? "✅ Bật" : "❌ Tắt",
+                    inline: true
+                }
+            )
+            .setFooter({
+                text: `Confession Bot • ${message.guild.name}`,
+                iconURL: message.guild.iconURL(),
+            })
+            .setTimestamp();
 
-            // Thông tin counter
-            embed.addFields({
-                name: "🔢 Số Confession",
-                value: `${guildSettings?.confession_counter || 0}`,
-                inline: true
-            });
+        // Tạo select menu cho các action
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId("config_action")
+            .setPlaceholder("Chọn hành động...")
+            .addOptions([
+                {
+                    label: "📝 Thiết lập kênh confession",
+                    description: "Chọn kênh để đăng confessions đã duyệt",
+                    value: "setup_confession",
+                    emoji: "📝"
+                },
+                {
+                    label: "👨‍⚖️ Thiết lập kênh review",
+                    description: "Chọn kênh để review confessions",
+                    value: "setup_review",
+                    emoji: "👨‍⚖️"
+                },
+                {
+                    label: "🔄 Thiết lập cả hai kênh",
+                    description: "Thiết lập cả kênh confession và review",
+                    value: "setup_both",
+                    emoji: "🔄"
+                },
+                {
+                    label: "🕵️ Chế độ Ẩn danh",
+                    description: "Bật/tắt chế độ ẩn danh cho confessions",
+                    value: "toggle_anonymous",
+                    emoji: "🕵️"
+                },
+                {
+                    label: "📊 Xem thống kê",
+                    description: "Xem thống kê confession chi tiết",
+                    value: "view_stats",
+                    emoji: "📊"
+                }
+            ]);
 
-            // Hướng dẫn thiết lập
-            if (!guildSettings?.review_channel) {
-                embed.addFields({
-                    name: "📋 Hướng dẫn thiết lập",
-                    value: "1. Tạo kênh review: `!setreview #review-confession`\n2. Tạo kênh confession: `!setconfess #confession`\n3. Gửi confession: `!confess <nội dung>`",
-                    inline: false
-                });
-            }
+        const row = new ActionRowBuilder().addComponents(selectMenu);
 
-            const configMsg = await message.channel.send({ embeds: [embed] });
-            setTimeout(() => {
-                configMsg.delete().catch(() => {});
-            }, 15000);
+        const configMsg = await message.channel.send({
+            embeds: [configEmbed],
+            components: [row]
+        });
 
-        } catch (error) {
-            console.error("Lỗi khi lấy cấu hình confession:", error);
-            const errorMsg = await message.channel.send(
-                "❌ Đã xảy ra lỗi khi lấy cấu hình!"
-            );
-            setTimeout(() => {
-                errorMsg.delete().catch(() => {});
-            }, 5000);
-        }
+        // Xóa tin nhắn sau 5 phút
+        setTimeout(() => {
+            configMsg.delete().catch(() => {});
+        }, 300000);
     },
 }; 

@@ -9,7 +9,8 @@
 ## ✨ Features
 
 ### 🔐 Anonymous Confession System
-- **Anonymous submissions** - Users can submit confessions without revealing their identity
+- **User-choice anonymity** - Users can choose to be anonymous for each confession
+- **Flexible submission** - Submit with or without anonymity using keywords
 - **Review system** - All confessions are reviewed by moderators before being posted
 - **Numbered confessions** - Each approved confession gets a unique number
 - **DM notifications** - Users receive notifications when their confessions are approved/rejected
@@ -81,6 +82,10 @@
 - `/confess` - Submit an anonymous confession
 - `/confessionstats` - View confession statistics (Moderator)
 - `/pendingconfessions` - View pending confessions (Moderator)
+- `!confess nội dung` - Submit confession normally
+- `!confess anonymous nội dung` - Submit anonymous confession
+- `!confess anon nội dung` - Submit anonymous confession
+- `!confess ẩn nội dung` - Submit anonymous confession
 
 ### Setup Commands
 - `/setconfessionchannel` - Set the confession channel (Admin)

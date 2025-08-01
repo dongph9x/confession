@@ -8,7 +8,7 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
-const db = require("./data/database");
+const db = require("./data/mongodb");
 const messageHandler = require("./utils/MessageCommandHandler");
 const logger = require("./utils/logger");
 const config = require("./config/bot");
@@ -83,8 +83,8 @@ const init = async () => {
         logger.info(`Version: ${config.bot.version}`);
 
         // Khởi tạo database
-        await db.init();
-        logger.info("✅ Database initialized");
+        await db.connect();
+        logger.info("✅ MongoDB connected");
 
         // Khởi tạo music client
         try {
@@ -172,17 +172,17 @@ client.on("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
         const settings = await db.getGuildSettings(guild.id);
         if (settings) {
-            if (settings.confession_channel) {
+            if (settings.confessionChannel) {
                 const confessionChannel = guild.channels.cache.get(
-                    settings.confession_channel
+                    settings.confessionChannel
                 );
                 if (confessionChannel) {
                     logger.info(`✅ Loaded confession channel for ${guild.name}: ${confessionChannel.name}`);
                 }
             }
-            if (settings.review_channel) {
+            if (settings.reviewChannel) {
                 const reviewChannel = guild.channels.cache.get(
-                    settings.review_channel
+                    settings.reviewChannel
                 );
                 if (reviewChannel) {
                     logger.info(`✅ Loaded review channel for ${guild.name}: ${reviewChannel.name}`);

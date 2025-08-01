@@ -1,84 +1,68 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
 const db = require("../../data/database");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("confessionconfig")
-        .setDescription("Xem cấu hình confession hiện tại")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDescription("Xem và quản lý cấu hình confession bot"),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-            const guildSettings = await db.getGuildSettings(interaction.guild.id);
-            
-            const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
-                .setTitle("⚙️ Cấu hình Confession")
-                .setDescription(`Cấu hình cho server **${interaction.guild.name}**`)
-                .setFooter({
-                    text: `Confession Bot • ${interaction.guild.name}`,
-                    iconURL: interaction.guild.iconURL(),
-                })
-                .setTimestamp();
-
-            // Thông tin kênh confession
-            if (guildSettings?.confession_channel) {
-                const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confession_channel);
-                embed.addFields({
-                    name: "📢 Kênh Confession",
-                    value: confessionChannel ? confessionChannel.toString() : "❌ Kênh không tồn tại",
-                    inline: true
-                });
-            } else {
-                embed.addFields({
-                    name: "📢 Kênh Confession",
-                    value: "❌ Chưa thiết lập",
-                    inline: true
-                });
-            }
-
-            // Thông tin kênh review
-            if (guildSettings?.review_channel) {
-                const reviewChannel = interaction.guild.channels.cache.get(guildSettings.review_channel);
-                embed.addFields({
-                    name: "👨‍⚖️ Kênh Review",
-                    value: reviewChannel ? reviewChannel.toString() : "❌ Kênh không tồn tại",
-                    inline: true
-                });
-            } else {
-                embed.addFields({
-                    name: "👨‍⚖️ Kênh Review",
-                    value: "❌ Chưa thiết lập",
-                    inline: true
-                });
-            }
-
-            // Thông tin counter
-            embed.addFields({
-                name: "🔢 Số Confession",
-                value: `${guildSettings?.confession_counter || 0}`,
-                inline: true
-            });
-
-            // Hướng dẫn thiết lập
-            if (!guildSettings?.review_channel) {
-                embed.addFields({
-                    name: "📋 Hướng dẫn thiết lập",
-                    value: "1. Tạo kênh review (ví dụ: #review-confession)\n2. Sử dụng `/setreviewchannel #kênh-review`\n3. Sử dụng `/setconfessionchannel #kênh-confession`",
-                    inline: false
-                });
-            }
-
-            return interaction.editReply({ embeds: [embed] });
-
-        } catch (error) {
-            console.error("Lỗi khi lấy cấu hình confession:", error);
-            return interaction.editReply({
-                content: "❌ Đã xảy ra lỗi khi lấy cấu hình!",
-                ephemeral: true,
+        // Kiểm tra quyền
+        if (!interaction.member.permissions.has("Administrator")) {
+            return interaction.reply({
+                content: "❌ Bạn cần quyền Administrator để sử dụng lệnh này!",
+                ephemeral: true
             });
         }
+
+        const settings = await db.getGuildSettings(interaction.guild.id);
+        const confessionChannel = settings.confession_channel ? `<#${settings.confession_channel}>` : "❌ Chưa thiết lập";
+        const reviewChannel = settings.review_channel ? `<#${settings.review_channel}>` : "❌ Chưa thiết lập";
+
+        const configEmbed = new EmbedBuilder()
+            .setTitle("⚙️ Cấu hình Confession Bot")
+            .setColor(0x1877F2)
+            .addFields(
+                { name: "📝 Kênh Confession", value: confessionChannel, inline: true },
+                { name: "👨‍⚖️ Kênh Review", value: reviewChannel, inline: true },
+                { name: "📊 Confession Counter", value: `${settings.confession_counter || 0}`, inline: true }
+            )
+            .setFooter({ text: "Confession Bot • Facebook Style" })
+            .setTimestamp();
+
+        // Tạo select menu cho actions
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId("config_action")
+            .setPlaceholder("Chọn hành động...")
+            .addOptions([
+                {
+                    label: "📝 Thiết lập kênh confession",
+                    value: "setup_confession",
+                    description: "Chọn kênh để đăng confessions"
+                },
+                {
+                    label: "👨‍⚖️ Thiết lập kênh review",
+                    value: "setup_review",
+                    description: "Chọn kênh để review confessions"
+                },
+                {
+                    label: "🔄 Thiết lập cả hai",
+                    value: "setup_both",
+                    description: "Thiết lập cả confession và review"
+                },
+                {
+                    label: "📊 Xem thống kê",
+                    value: "view_stats",
+                    description: "Xem thống kê confession"
+                }
+            ]);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        await interaction.reply({
+            embeds: [configEmbed],
+            components: [row],
+            ephemeral: true
+        });
     },
 }; 

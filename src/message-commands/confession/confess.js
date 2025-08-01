@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 const config = require("../../config/bot");
 
 module.exports = {
@@ -14,14 +14,23 @@ module.exports = {
             console.log("Could not delete message:", error.message);
         }
 
-        const content = args.join(" ");
+        // Kiểm tra argument cho chế độ ẩn danh
+        let isAnonymous = false;
+        let content = args.join(" ");
+        
+        // Kiểm tra flag ẩn danh
+        if (args.length > 0 && (args[0] === "anonymous" || args[0] === "anon" || args[0] === "ẩn")) {
+            isAnonymous = true;
+            content = args.slice(1).join(" ");
+        }
+
         if (!content) {
             const errorMsg = await message.channel.send(
-                "❌ Vui lòng nhập nội dung confession!"
+                "❌ Vui lòng nhập nội dung confession!\n\n**Cách sử dụng:**\n`!confess nội dung` - Gửi confession bình thường\n`!confess anonymous nội dung` - Gửi confession ẩn danh\n`!confess anon nội dung` - Gửi confession ẩn danh"
             );
             setTimeout(() => {
                 errorMsg.delete().catch(() => {}); // Bỏ qua lỗi nếu không thể xóa
-            }, 5000);
+            }, 8000);
             return;
         }
 
@@ -47,7 +56,7 @@ module.exports = {
         }
 
         const guildSettings = await db.getGuildSettings(message.guild.id);
-        if (!guildSettings?.review_channel) {
+        if (!guildSettings?.reviewChannel) {
             const errorMsg = await message.channel.send(
                 "❌ Kênh review confession chưa được thiết lập! Hãy nhờ Admin sử dụng lệnh `!setreview`"
             );
@@ -58,7 +67,7 @@ module.exports = {
         }
 
         const reviewChannel = message.guild.channels.cache.get(
-            guildSettings.review_channel
+            guildSettings.reviewChannel
         );
         if (!reviewChannel) {
             const errorMsg = await message.channel.send(
@@ -71,11 +80,12 @@ module.exports = {
         }
 
         try {
-            // Lưu confession vào database
+            // Lưu confession vào database với thông tin ẩn danh
             const confessionId = await db.addConfession(
                 message.guild.id,
                 message.author.id,
-                content
+                content,
+                isAnonymous
             );
 
             if (!confessionId) {
@@ -90,7 +100,8 @@ module.exports = {
                 .addFields(
                     { name: "🆔 ID Confession", value: `#${confessionId}`, inline: true },
                     { name: "👤 Người gửi", value: `<@${message.author.id}>`, inline: true },
-                    { name: "📅 Thời gian", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                    { name: "⏰ Thời gian", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                    { name: "🕵️ Chế độ", value: isAnonymous ? "🕵️ Ẩn danh" : "👤 Hiển thị tên", inline: true }
                 )
                 .setAuthor({
                     name: message.author.username,
@@ -126,11 +137,11 @@ module.exports = {
             });
 
             const successMsg = await message.channel.send(
-                "✅ Confession của bạn đã được gửi để duyệt! Bạn sẽ được thông báo khi confession được duyệt hoặc từ chối."
+                `✅ Confession của bạn đã được gửi để duyệt! ${isAnonymous ? '🕵️ Confession sẽ được đăng ẩn danh.' : '👤 Confession sẽ hiển thị tên của bạn.'}\n\nBạn sẽ được thông báo khi confession được duyệt hoặc từ chối.`
             );
             setTimeout(() => {
                 successMsg.delete().catch(() => {});
-            }, 5000);
+            }, 8000);
         } catch (error) {
             console.error("Lỗi khi gửi confession:", error);
             const errorMsg = await message.channel.send(
