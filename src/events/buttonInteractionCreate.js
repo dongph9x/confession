@@ -167,9 +167,12 @@ async function handleConfessionReview(interaction, customId) {
     const action = customId.split('_')[0];
 
     try {
+        // Defer update ngay từ đầu để tránh timeout
+        await interaction.deferUpdate();
+        
         const confession = await db.getConfession(confessionId);
         if (!confession) {
-            return interaction.reply({
+            return interaction.followUp({
                 content: "❌ Không tìm thấy confession này!",
                 flags: 64 // Ephemeral flag
             });
@@ -177,28 +180,33 @@ async function handleConfessionReview(interaction, customId) {
 
         // Kiểm tra xem confession đã được xử lý chưa
         if (confession.status !== 'pending') {
-            return interaction.reply({
+            return interaction.followUp({
                 content: `❌ Confession này đã được ${confession.status === 'approved' ? 'duyệt' : 'từ chối'} rồi!`,
                 flags: 64 // Ephemeral flag
             });
         }
 
-        const guildSettings = await db.getGuildSettings(interaction.guild.id);
-        
         if (action === 'approve') {
-            // Duyệt confession
+            // Lấy guild settings
+            const guildSettings = await db.getGuildSettings(interaction.guild.id);
+            if (!guildSettings) {
+                return interaction.followUp({
+                    content: "❌ Guild settings chưa được thiết lập!",
+                    flags: 64 // Ephemeral flag
+                });
+            }
+
+            // Kiểm tra kênh confession
             const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confessionChannel);
             if (!confessionChannel) {
-                return interaction.reply({
+                return interaction.followUp({
                     content: "❌ Kênh confession chưa được thiết lập!",
                     flags: 64 // Ephemeral flag
                 });
             }
 
-            // Lấy thông tin người gửi confession
+            // Lấy thông tin user
             const confessionAuthor = await interaction.client.users.fetch(confession.userId);
-            
-            // Kiểm tra chế độ ẩn danh từ confession
             const isAnonymous = confession.isAnonymous;
 
             // Tạo embed cho confession đã duyệt
@@ -253,108 +261,50 @@ async function handleConfessionReview(interaction, customId) {
             await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
 
             // Cập nhật embed gốc
-            const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor(0x00FF00)
-                .setTitle("✅ Confession Đã Được Duyệt")
                 .addFields(
-                    { name: "👨‍⚖️ Duyệt bởi", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "✅ Trạng thái", value: "Đã duyệt", inline: true },
+                    { name: "👤 Người duyệt", value: `<@${interaction.user.id}>`, inline: true },
                     { name: "⏰ Thời gian duyệt", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
                 );
 
-            // Disable buttons
-            const disabledButtons = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`approve_${confessionId}`)
-                        .setLabel("✅ Đã Duyệt")
-                        .setStyle(ButtonStyle.Success)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`reject_${confessionId}`)
-                        .setLabel("❌ Từ chối")
-                        .setStyle(ButtonStyle.Danger)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`edit_${confessionId}`)
-                        .setLabel("✏️ Chỉnh sửa")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
-                );
-
             await interaction.message.edit({
-                embeds: [updatedEmbed],
-                components: [disabledButtons]
+                embeds: [originalEmbed],
+                components: []
             });
 
-            await interaction.reply({
+            await interaction.followUp({
                 content: `✅ Đã duyệt confession #${confessionId}!`,
                 flags: 64 // Ephemeral flag
             });
 
-            // Thông báo cho người gửi
-            try {
-                const user = await interaction.client.users.fetch(confession.userId);
-                await user.send({
-                    content: `🎉 Confession của bạn đã được duyệt và đăng lên server **${interaction.guild.name}**!`
-                });
-            } catch (error) {
-                console.log("Không thể gửi DM cho user:", error.message);
-            }
-
         } else if (action === 'reject') {
-            // Từ chối confession
+            // Cập nhật trạng thái trong database
             await db.updateConfessionStatus(confessionId, 'rejected', interaction.user.id);
 
-            const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            // Cập nhật embed gốc
+            const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor(0xFF0000)
-                .setTitle("❌ Confession Đã Bị Từ Chối")
                 .addFields(
-                    { name: "👨‍⚖️ Từ chối bởi", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "❌ Trạng thái", value: "Đã từ chối", inline: true },
+                    { name: "👤 Người từ chối", value: `<@${interaction.user.id}>`, inline: true },
                     { name: "⏰ Thời gian từ chối", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
                 );
 
-            const disabledButtons = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`approve_${confessionId}`)
-                        .setLabel("✅ Duyệt")
-                        .setStyle(ButtonStyle.Success)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`reject_${confessionId}`)
-                        .setLabel("❌ Đã Từ Chối")
-                        .setStyle(ButtonStyle.Danger)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`edit_${confessionId}`)
-                        .setLabel("✏️ Chỉnh sửa")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
-                );
-
             await interaction.message.edit({
-                embeds: [updatedEmbed],
-                components: [disabledButtons]
+                embeds: [originalEmbed],
+                components: []
             });
 
-            await interaction.reply({
+            await interaction.followUp({
                 content: `❌ Đã từ chối confession #${confessionId}!`,
                 flags: 64 // Ephemeral flag
             });
 
-            // Thông báo cho người gửi
-            try {
-                const user = await interaction.client.users.fetch(confession.userId);
-                await user.send({
-                    content: `😔 Confession của bạn đã bị từ chối trên server **${interaction.guild.name}**.`
-                });
-            } catch (error) {
-                console.log("Không thể gửi DM cho user:", error.message);
-            }
-
         } else if (action === 'edit') {
             // Hiển thị modal để chỉnh sửa
-            await interaction.reply({
+            await interaction.followUp({
                 content: "✏️ Tính năng chỉnh sửa sẽ được phát triển trong phiên bản tiếp theo!",
                 flags: 64 // Ephemeral flag
             });
@@ -362,9 +312,13 @@ async function handleConfessionReview(interaction, customId) {
 
     } catch (error) {
         console.error("Lỗi khi xử lý review confession:", error);
-        await interaction.reply({
-            content: "❌ Đã xảy ra lỗi khi xử lý review!",
-            flags: 64 // Ephemeral flag
-        });
+        try {
+            await interaction.followUp({
+                content: "❌ Đã xảy ra lỗi khi xử lý review!",
+                flags: 64 // Ephemeral flag
+            });
+        } catch (followUpError) {
+            console.error("Không thể gửi followUp:", followUpError.message);
+        }
     }
 } 
