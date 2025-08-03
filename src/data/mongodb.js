@@ -91,22 +91,19 @@ class MongoDB {
         const Confession = require('../models/Confession');
         const GuildSettings = require('../models/GuildSettings');
         
-        // Lấy guild settings để tăng confession counter
+        // Lấy guild settings
         let guildSettings = await GuildSettings.findOne({ guildId });
         if (!guildSettings) {
             guildSettings = new GuildSettings({ guildId, confessionCounter: 0 });
         }
         
-        // Tăng confession counter
-        guildSettings.confessionCounter += 1;
-        await guildSettings.save();
-        
+        // Tạo confession với confessionNumber = 0 (sẽ được cập nhật khi approve)
         const confession = new Confession({
             guildId,
             userId,
             content,
             isAnonymous,
-            confessionNumber: guildSettings.confessionCounter
+            confessionNumber: 0
         });
         await confession.save();
         return confession._id;
@@ -143,15 +140,16 @@ class MongoDB {
 
         let confessionNumber = confession.confessionNumber;
         
-        if (status === 'approved' && confessionNumber === 0) {
-            // Tăng counter cho guild
+        if (status === 'approved') {
+            // Tăng counter cho guild khi approve
             const settings = await GuildSettings.findOneAndUpdate(
                 { guildId: confession.guildId },
                 { $inc: { confessionCounter: 1 } },
                 { new: true, upsert: true }
             );
             
-            confessionNumber = settings ? settings.confessionCounter : 1;
+            // Cập nhật confession number thành counter mới
+            confessionNumber = settings ? settings.confessionCounter : confessionNumber + 1;
         }
 
         return await Confession.findByIdAndUpdate(confessionId, {
@@ -184,6 +182,14 @@ class MongoDB {
 
     async getConfessionByNumberAnyStatus(guildId, confessionNumber) {
         const Confession = require('../models/Confession');
+        
+        // Nếu guildId là null, tìm ở bất kỳ guild nào
+        if (guildId === null) {
+            return await Confession.findOne({ 
+                confessionNumber
+            });
+        }
+        
         return await Confession.findOne({ 
             guildId, 
             confessionNumber

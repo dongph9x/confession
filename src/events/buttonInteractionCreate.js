@@ -46,23 +46,63 @@ async function handleEmojiButton(interaction, customId) {
     }
 
     try {
-        // Lấy confession ID từ message content (plain text format)
+        // Lấy confession ID từ message content hoặc embeds
         const messageContent = interaction.message.content;
-        if (!messageContent) {
-            try {
-                await interaction.followUp({
-                    content: "❌ Không tìm thấy confession!",
-                    flags: 64
-                });
-            } catch (replyError) {
-                console.error("Không thể reply interaction:", replyError.message);
+        let confessionNumber = null;
+        
+        // Debug: Log message info
+        console.log('🔍 Debug emoji button click:');
+        console.log(`   Message ID: ${interaction.message.id}`);
+        console.log(`   Message content: "${messageContent}"`);
+        console.log(`   Message content length: ${messageContent ? messageContent.length : 0}`);
+        console.log(`   Message embeds: ${interaction.message.embeds.length}`);
+        
+        // Method 1: Tìm từ message content
+        if (messageContent) {
+            const titleMatch = messageContent.match(/Confession #(\d+)/);
+            if (titleMatch) {
+                confessionNumber = parseInt(titleMatch[1]);
+                console.log(`   ✅ Found confession number from content: ${confessionNumber}`);
             }
-            return;
         }
-
-        // Tìm confession ID từ content (Confession #123)
-        const titleMatch = messageContent.match(/Confession #(\d+)/);
-        if (!titleMatch) {
+        
+        // Method 2: Tìm từ embeds nếu content rỗng
+        if (!confessionNumber && interaction.message.embeds.length > 0) {
+            const embed = interaction.message.embeds[0];
+            console.log(`   Checking embed: "${embed.title}"`);
+            
+            if (embed.title) {
+                const titleMatch = embed.title.match(/Confession #(\d+)/);
+                if (titleMatch) {
+                    confessionNumber = parseInt(titleMatch[1]);
+                    console.log(`   ✅ Found confession number from embed title: ${confessionNumber}`);
+                }
+            }
+            
+            if (!confessionNumber && embed.description) {
+                const descMatch = embed.description.match(/Confession #(\d+)/);
+                if (descMatch) {
+                    confessionNumber = parseInt(descMatch[1]);
+                    console.log(`   ✅ Found confession number from embed description: ${confessionNumber}`);
+                }
+            }
+        }
+        
+        // Method 3: Tìm từ custom ID của button (fallback)
+        if (!confessionNumber) {
+            // Extract confession ID from button custom ID if available
+            const customIdParts = customId.split('_');
+            if (customIdParts.length > 1) {
+                const possibleConfessionId = customIdParts[customIdParts.length - 1];
+                if (possibleConfessionId && !isNaN(possibleConfessionId)) {
+                    confessionNumber = parseInt(possibleConfessionId);
+                    console.log(`   ✅ Found confession number from custom ID: ${confessionNumber}`);
+                }
+            }
+        }
+        
+        if (!confessionNumber) {
+            console.log(`   ❌ No confession number found`);
             try {
                 await interaction.followUp({
                     content: "❌ Không thể xác định confession!",
@@ -73,20 +113,32 @@ async function handleEmojiButton(interaction, customId) {
             }
             return;
         }
-
-        const confessionNumber = parseInt(titleMatch[1]);
+        
+        console.log(`   🔍 Looking for confession #${confessionNumber} in guild ${interaction.guild.id}`);
         const confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
         
         if (!confession) {
-            try {
-                await interaction.followUp({
-                    content: "❌ Không tìm thấy confession!",
-                    flags: 64
-                });
-            } catch (replyError) {
-                console.error("Không thể reply interaction:", replyError.message);
+            console.log(`   ❌ Confession #${confessionNumber} not found in database`);
+            console.log(`   ⚠️ This confession might be displayed in Discord but not saved in database`);
+            
+            // Try to find confession in any guild
+            const confessionAnyGuild = await db.getConfessionByNumberAnyStatus(null, confessionNumber);
+            if (confessionAnyGuild) {
+                console.log(`   ✅ Found confession #${confessionNumber} in another guild: ${confessionAnyGuild.guildId}`);
+                // Use the confession from another guild
+                const confession = confessionAnyGuild;
+            } else {
+                console.log(`   ❌ Confession #${confessionNumber} not found in any guild`);
+                try {
+                    await interaction.followUp({
+                        content: "❌ Không tìm thấy confession! (Confession có thể chưa được lưu vào database)",
+                        flags: 64
+                    });
+                } catch (replyError) {
+                    console.error("Không thể reply interaction:", replyError.message);
+                }
+                return;
             }
-            return;
         }
 
         // Toggle emoji reaction
