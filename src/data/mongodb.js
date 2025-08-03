@@ -205,19 +205,116 @@ class MongoDB {
 
     // Placeholder methods for compatibility
     async getReactionStats(guildId) {
-        return {
-            confessions_with_reactions: 0,
-            total_reactions: 0,
-            unique_users_reacted: 0
-        };
+        const EmojiReaction = require('../models/EmojiReaction');
+        const Confession = require('../models/Confession');
+        
+        try {
+            // Tổng số reactions
+            const totalReactions = await EmojiReaction.countDocuments({ guildId });
+            
+            // Số confession có reactions
+            const confessionsWithReactions = await EmojiReaction.distinct('confessionId', { guildId });
+            
+            // Số users đã react
+            const uniqueUsersReacted = await EmojiReaction.distinct('userId', { guildId });
+            
+            return {
+                confessions_with_reactions: confessionsWithReactions.length,
+                total_reactions: totalReactions,
+                unique_users_reacted: uniqueUsersReacted.length
+            };
+        } catch (error) {
+            console.error('❌ getReactionStats error:', error);
+            return {
+                confessions_with_reactions: 0,
+                total_reactions: 0,
+                unique_users_reacted: 0
+            };
+        }
     }
 
     async getCommentStats(guildId) {
-        return {
-            confessions_with_comments: 0,
-            total_comments: 0,
-            unique_users_commented: 0
-        };
+        const Comment = require('../models/Comment');
+        const Confession = require('../models/Confession');
+        
+        try {
+            // Tổng số comments
+            const totalComments = await Comment.countDocuments({ 
+                guildId, 
+                isDeleted: false 
+            });
+            
+            // Số confession có comments
+            const confessionsWithComments = await Comment.distinct('confessionId', { 
+                guildId, 
+                isDeleted: false 
+            });
+            
+            // Số users đã comment
+            const uniqueUsersCommented = await Comment.distinct('userId', { 
+                guildId, 
+                isDeleted: false 
+            });
+            
+            return {
+                confessions_with_comments: confessionsWithComments.length,
+                total_comments: totalComments,
+                unique_users_commented: uniqueUsersCommented.length
+            };
+        } catch (error) {
+            console.error('❌ getCommentStats error:', error);
+            return {
+                confessions_with_comments: 0,
+                total_comments: 0,
+                unique_users_commented: 0
+            };
+        }
+    }
+
+    // Comment Methods
+    async addComment(guildId, confessionId, userId, username, content, messageId, threadId, isAnonymous = false) {
+        const Comment = require('../models/Comment');
+        
+        const comment = new Comment({
+            guildId,
+            confessionId,
+            userId,
+            username,
+            content,
+            messageId,
+            threadId,
+            isAnonymous
+        });
+        
+        await comment.save();
+        return comment._id;
+    }
+
+    async getCommentsByConfession(guildId, confessionId, limit = 50) {
+        const Comment = require('../models/Comment');
+        
+        return await Comment.find({
+            guildId,
+            confessionId,
+            isDeleted: false
+        })
+        .sort({ createdAt: 1 })
+        .limit(limit);
+    }
+
+    async deleteComment(commentId) {
+        const Comment = require('../models/Comment');
+        
+        return await Comment.findByIdAndUpdate(commentId, {
+            isDeleted: true,
+            updatedAt: new Date()
+        });
+    }
+
+    async getCommentById(commentId) {
+        const Comment = require('../models/Comment');
+        
+        return await Comment.findById(commentId);
     }
 
     // Emoji Reaction Methods

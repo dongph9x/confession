@@ -20,7 +20,7 @@ const emojiReactionSchema = new mongoose.Schema({
     emojiKey: {
         type: String,
         required: true,
-        enum: ['heart', 'laugh', 'wow', 'sad', 'fire', 'clap', 'pray', 'love']
+        enum: ['heart', 'laugh', 'wow', 'sad', 'fire', 'clap', 'pray', 'love', 'like', 'dislike', 'cry', 'angry', 'cool', 'sleep', 'party', 'star', 'crown', 'gem', 'sparkles', 'rainbow', 'rocket']
     },
     createdAt: {
         type: Date,
