@@ -335,6 +335,141 @@ class MongoDB {
         return await Comment.findOne({ messageId });
     }
 
+    // Top Commenters Methods
+    async getTopCommenters(guildId, limit = 10) {
+        const Comment = require('../models/Comment');
+        
+        try {
+            // Aggregate để đếm comments theo user
+            const topCommenters = await Comment.aggregate([
+                { $match: { guildId, isDeleted: false } },
+                { $group: { 
+                    _id: '$userId', 
+                    username: { $first: '$username' },
+                    commentCount: { $sum: 1 },
+                    comments: { $push: { content: '$content', createdAt: '$createdAt' } }
+                }},
+                { $project: {
+                    userId: '$_id',
+                    username: 1,
+                    commentCount: 1,
+                    comments: { $slice: ['$comments', 5] } // Lấy 5 comments gần nhất
+                }},
+                { $sort: { commentCount: -1 } },
+                { $limit: limit }
+            ]);
+
+            return topCommenters;
+        } catch (error) {
+            console.error('❌ getTopCommenters error:', error);
+            return [];
+        }
+    }
+
+    async getUserCommentStats(guildId, userId) {
+        const Comment = require('../models/Comment');
+        
+        try {
+            // Tổng số comments của user
+            const totalComments = await Comment.countDocuments({ 
+                guildId, 
+                userId, 
+                isDeleted: false 
+            });
+
+            // Số confession khác nhau mà user đã comment
+            const uniqueConfessions = await Comment.distinct('confessionId', { 
+                guildId, 
+                userId, 
+                isDeleted: false 
+            });
+
+            // Comments gần nhất
+            const recentComments = await Comment.find({ 
+                guildId, 
+                userId, 
+                isDeleted: false 
+            })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .select('content createdAt confessionId');
+
+            // Thống kê theo thời gian
+            const now = new Date();
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+            const commentsThisWeek = await Comment.countDocuments({
+                guildId,
+                userId,
+                isDeleted: false,
+                createdAt: { $gte: oneWeekAgo }
+            });
+
+            const commentsThisMonth = await Comment.countDocuments({
+                guildId,
+                userId,
+                isDeleted: false,
+                createdAt: { $gte: oneMonthAgo }
+            });
+
+            return {
+                totalComments,
+                uniqueConfessions: uniqueConfessions.length,
+                commentsThisWeek,
+                commentsThisMonth,
+                recentComments
+            };
+        } catch (error) {
+            console.error('❌ getUserCommentStats error:', error);
+            return {
+                totalComments: 0,
+                uniqueConfessions: 0,
+                commentsThisWeek: 0,
+                commentsThisMonth: 0,
+                recentComments: []
+            };
+        }
+    }
+
+    async getCommenterRanking(guildId, limit = 20) {
+        const Comment = require('../models/Comment');
+        
+        try {
+            // Aggregate để tạo ranking
+            const ranking = await Comment.aggregate([
+                { $match: { guildId, isDeleted: false } },
+                { $group: { 
+                    _id: '$userId', 
+                    username: { $first: '$username' },
+                    commentCount: { $sum: 1 },
+                    firstComment: { $min: '$createdAt' },
+                    lastComment: { $max: '$createdAt' }
+                }},
+                { $project: {
+                    userId: '$_id',
+                    username: 1,
+                    commentCount: 1,
+                    firstComment: 1,
+                    lastComment: 1
+                }},
+                { $sort: { commentCount: -1, lastComment: -1 } },
+                { $limit: limit }
+            ]);
+
+            // Thêm rank cho mỗi user
+            ranking.forEach((user, index) => {
+                user.rank = index + 1;
+                user.rankEmoji = user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : user.rank === 3 ? '🥉' : `#${user.rank}`;
+            });
+
+            return ranking;
+        } catch (error) {
+            console.error('❌ getCommenterRanking error:', error);
+            return [];
+        }
+    }
+
     // Top Confessions Methods
     async getTopConfessionsByReactions(guildId, limit = 10) {
         const EmojiReaction = require('../models/EmojiReaction');
