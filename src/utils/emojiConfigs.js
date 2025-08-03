@@ -7,7 +7,8 @@ const EMOJI_CONFIGS = {
         heart: { emoji: "❤️", label: "Heart", style: ButtonStyle.Secondary },
         laugh: { emoji: "😂", label: "Laugh", style: ButtonStyle.Secondary },
         wow: { emoji: "😮", label: "Wow", style: ButtonStyle.Secondary },
-        sad: { emoji: "😢", label: "Sad", style: ButtonStyle.Secondary }
+        sad: { emoji: "😢", label: "Sad", style: ButtonStyle.Secondary },
+        love: { emoji: "💕", label: "Love", style: ButtonStyle.Secondary }
     },
     
     // Popular - 6 emoji phổ biến

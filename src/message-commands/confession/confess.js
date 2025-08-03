@@ -215,8 +215,23 @@ module.exports = {
                 );
             }
 
-            // Chỉ gửi đến review channel nếu không phải auto-approve/reject
-            if (autoAction !== 'approve' && autoAction !== 'reject') {
+            // Chỉ gửi đến review channel khi cần admin quyết định
+            let needsAdminReview = true;
+            let reviewReason = "Cần admin review";
+
+            if (autoAction === 'reject') {
+                needsAdminReview = false;
+                reviewReason = "AI đã tự động từ chối";
+            } else if (autoAction === 'approve') {
+                needsAdminReview = false;
+                reviewReason = "AI đã tự động duyệt";
+            } else if (aiAnalysis) {
+                reviewReason = `AI phân tích: ${aiAnalysis.safety_level} (${aiAnalysis.score}/10) - Cần admin quyết định`;
+            } else {
+                reviewReason = "Không có AI analysis - Cần admin review";
+            }
+
+            if (needsAdminReview) {
                 // Gửi message với AI analysis
                 const messageData = {
                     content: `📝 Confession mới từ **${message.author.username}** (${message.author.tag}) cần duyệt!`,
@@ -230,6 +245,9 @@ module.exports = {
                 }
 
                 await reviewChannel.send(messageData);
+                console.log(`📝 [REVIEW] Confession ${confessionId} gửi đến review channel: ${reviewReason}`);
+            } else {
+                console.log(`🤖 [AUTO] Confession ${confessionId} ${autoAction === 'approve' ? 'approved' : 'rejected'} bởi AI`);
             }
 
             // Thông báo cho user

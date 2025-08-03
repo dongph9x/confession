@@ -9,10 +9,10 @@ function createEmojiButtons(counts = {}) {
     const rows = [];
     const emojiEntries = Object.entries(EMOJIS);
     
-    // Chia thành 2 rows, mỗi row 4 buttons
-    for (let i = 0; i < emojiEntries.length; i += 4) {
+    // Chia thành nhiều hàng, tối đa 5 buttons mỗi hàng (Discord limit)
+    for (let i = 0; i < emojiEntries.length; i += 5) {
         const row = new ActionRowBuilder();
-        const rowEmojis = emojiEntries.slice(i, i + 4);
+        const rowEmojis = emojiEntries.slice(i, i + 5);
         
         rowEmojis.forEach(([key, config]) => {
             const count = counts[key] || 0;
@@ -47,10 +47,10 @@ function updateEmojiButtons(components, counts, userReactions = []) {
     const rows = [];
     const emojiEntries = Object.entries(EMOJIS);
     
-    // Chia thành 2 rows, mỗi row 4 buttons
-    for (let i = 0; i < emojiEntries.length; i += 4) {
+    // Chia thành nhiều hàng, tối đa 5 buttons mỗi hàng (Discord limit)
+    for (let i = 0; i < emojiEntries.length; i += 5) {
         const row = new ActionRowBuilder();
-        const rowEmojis = emojiEntries.slice(i, i + 4);
+        const rowEmojis = emojiEntries.slice(i, i + 5);
         
         rowEmojis.forEach(([key, config]) => {
             const count = counts[key] || 0;
