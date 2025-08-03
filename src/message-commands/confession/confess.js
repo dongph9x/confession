@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const db = require("../../data/mongodb");
 const config = require("../../config/bot");
+const AIContentAnalyzer = require('../../utils/aiContentAnalyzer');
 
 module.exports = {
     name: "confess",
@@ -107,6 +108,65 @@ module.exports = {
                 throw new Error("Failed to save confession to database");
             }
 
+            // AI Analysis (nếu có API key)
+            let aiAnalysis = null;
+            let aiEmbed = null;
+            let autoAction = null;
+
+            if (process.env.OPENAI_API_KEY) {
+                try {
+                    console.log(`🤖 [AI] Starting analysis for confession ${confessionId}...`);
+                    console.log(`🤖 [AI] Content: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+                    console.log(`🤖 [AI] OpenAI API Key exists: ${process.env.OPENAI_API_KEY ? 'YES' : 'NO'}`);
+                    
+                    const analyzer = new AIContentAnalyzer();
+                    console.log(`🤖 [AI] Analyzer created successfully`);
+                    
+                    const analysis = await analyzer.analyzeConfession(content, message.guild.name);
+                    console.log(`🤖 [AI] Analysis result:`, analysis);
+                    
+                    if (analysis.success) {
+                        console.log(`✅ [AI] Analysis completed successfully`);
+                        console.log(`🤖 [AI] Result: ${analysis.analysis.safety_level} | ${analysis.analysis.content_type} | Score: ${analysis.analysis.score}/10`);
+                        console.log(`🤖 [AI] Recommendation: ${analysis.analysis.recommendation}`);
+                        
+                        // Lưu AI analysis vào database
+                        await db.saveAIAnalysis(confessionId, analysis.analysis);
+                        aiAnalysis = analysis.analysis;
+                        
+                        // Tạo embed cho AI analysis
+                        const summary = await analyzer.getAnalysisSummary(analysis);
+                        aiEmbed = new EmbedBuilder()
+                            .setColor(summary.color)
+                            .setTitle(`${summary.emoji} ${summary.title}`)
+                            .setDescription(summary.description)
+                            .setTimestamp();
+
+                        // Tự động xử lý dựa trên AI recommendation
+                        if (aiAnalysis.recommendation === 'REJECT') {
+                            autoAction = 'reject';
+                            console.log(`🚫 [AI] Auto-rejecting confession ${confessionId}`);
+                        } else if (aiAnalysis.recommendation === 'APPROVE' && aiAnalysis.safety_level === 'APPROPRIATE' && aiAnalysis.score <= 3) {
+                            // Chỉ auto-approve khi score <= 3 (rất phù hợp)
+                            autoAction = 'approve';
+                            console.log(`✅ [AI] Auto-approving confession ${confessionId}`);
+                        } else if (aiAnalysis.safety_level === 'INAPPROPRIATE' || aiAnalysis.score >= 7) {
+                            // Tự động reject nếu INAPPROPRIATE hoặc score cao
+                            autoAction = 'reject';
+                            console.log(`🚫 [AI] Auto-rejecting confession ${confessionId} (high score or inappropriate)`);
+                        } else {
+                            console.log(`⚠️ [AI] Manual review required for confession ${confessionId}`);
+                        }
+                    } else {
+                        console.log(`❌ [AI] Analysis failed: ${analysis.error}`);
+                    }
+                } catch (aiError) {
+                    console.error('❌ [AI] Analysis error:', aiError);
+                }
+            } else {
+                console.log(`⚠️ [AI] No OpenAI API key found - skipping AI analysis`);
+            }
+
             // Tạo embed cho review
             const reviewEmbed = new EmbedBuilder()
                 .setColor(config.colors.warning)
@@ -145,15 +205,70 @@ module.exports = {
                         .setStyle(ButtonStyle.Secondary)
                 );
 
-            await reviewChannel.send({
-                content: `📝 Confession mới từ **${message.author.username}** (${message.author.tag}) cần duyệt!`,
-                embeds: [reviewEmbed],
-                components: [buttons]
-            });
+            // Thêm AI reject button nếu AI khuyến nghị reject
+            if (aiAnalysis && aiAnalysis.recommendation === 'REJECT') {
+                buttons.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ai_reject_${confessionId}`)
+                        .setLabel("🤖 AI Reject")
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
 
-            const successMsg = await message.channel.send(
-                `✅ Confession của bạn đã được gửi để duyệt! ${isAnonymous ? '🕵️ Confession sẽ được đăng ẩn danh.' : '👤 Confession sẽ hiển thị tên của bạn.'}\n\nBạn sẽ được thông báo khi confession được duyệt hoặc từ chối.`
-            );
+            // Chỉ gửi đến review channel nếu không phải auto-approve/reject
+            if (autoAction !== 'approve' && autoAction !== 'reject') {
+                // Gửi message với AI analysis
+                const messageData = {
+                    content: `📝 Confession mới từ **${message.author.username}** (${message.author.tag}) cần duyệt!`,
+                    embeds: [reviewEmbed],
+                    components: [buttons]
+                };
+
+                // Thêm AI analysis embed nếu có
+                if (aiEmbed) {
+                    messageData.embeds.push(aiEmbed);
+                }
+
+                await reviewChannel.send(messageData);
+            }
+
+            // Thông báo cho user
+            let userMessage = `✅ Confession của bạn đã được gửi để duyệt! ${isAnonymous ? '🕵️ Confession sẽ được đăng ẩn danh.' : '👤 Confession sẽ hiển thị tên của bạn.'}\n\nBạn sẽ được thông báo khi confession được duyệt hoặc từ chối.`;
+            
+            if (autoAction === 'reject') {
+                userMessage = `❌ Confession của bạn đã bị từ chối vì nội dung không phù hợp.\n\n🤖 **Lý do từ AI:** ${aiAnalysis.reason}\n📊 **Độ nghiêm trọng:** ${aiAnalysis.score}/10\n🛡️ **Loại nội dung:** ${aiAnalysis.content_type}`;
+                // Cập nhật trạng thái confession thành rejected
+                await db.updateConfessionStatus(confessionId, 'rejected', 'AI System');
+            } else if (autoAction === 'approve') {
+                userMessage = "✅ Confession của bạn đã được AI tự động duyệt!";
+                // Tự động approve và gửi đến confession channel
+                const confessionChannel = message.guild.channels.cache.get(guildSettings.confessionChannel);
+                
+                if (confessionChannel) {
+                    const approvedConfessionsCount = await db.getApprovedConfessionsCount(message.guild.id);
+                    const confessionNumber = approvedConfessionsCount + 1;
+                    
+                    const timeString = `<t:${Math.floor(Date.now() / 1000)}:R>`;
+                    const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${message.author.id}>`;
+                    
+                    const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${message.guild.name}*`;
+
+                    const { createEmojiButtons } = require("../../utils/emojiButtons");
+                    const emojiCounts = await db.getEmojiCounts(message.guild.id, confessionId);
+                    const emojiButtons = createEmojiButtons(emojiCounts);
+
+                    await confessionChannel.send({ 
+                        content: plainTextContent,
+                        components: emojiButtons
+                    });
+
+                    await db.updateConfessionStatus(confessionId, 'approved', 'AI System', null, null, confessionNumber);
+                }
+            } else if (aiAnalysis) {
+                userMessage += `\n\n🤖 AI đã phân tích: ${aiAnalysis.safety_level} (${aiAnalysis.score}/10)`;
+            }
+
+            const successMsg = await message.channel.send(userMessage);
             setTimeout(() => {
                 successMsg.delete().catch(() => {});
             }, 8000);

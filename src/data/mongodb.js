@@ -201,6 +201,16 @@ class MongoDB {
         });
     }
 
+    async saveAIAnalysis(confessionId, analysis) {
+        const Confession = require('../models/Confession');
+        return await Confession.findByIdAndUpdate(confessionId, {
+            aiAnalysis: {
+                ...analysis,
+                analyzedAt: new Date()
+            }
+        }, { new: true });
+    }
+
     async getConfessionStats(guildId) {
         const Confession = require('../models/Confession');
         const stats = await Confession.aggregate([

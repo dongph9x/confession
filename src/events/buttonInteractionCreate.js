@@ -11,7 +11,11 @@ module.exports = {
         
         // Xử lý các button review confession
         if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
-            await handleConfessionReview(interaction, customId);
+            try {
+                await handleConfessionReview(interaction, customId);
+            } catch (error) {
+                console.error('Lỗi khi xử lý review confession:', error);
+            }
         }
         // Xử lý emoji buttons
         else if (customId.startsWith('emoji_')) {
@@ -241,7 +245,14 @@ async function handleConfessionReview(interaction, customId) {
 
     try {
         // Defer update ngay từ đầu để tránh timeout
-        await interaction.deferUpdate();
+        try {
+            await interaction.deferUpdate();
+        } catch (deferError) {
+            // Nếu đã defer rồi thì bỏ qua
+            if (deferError.code !== 'InteractionAlreadyReplied') {
+                throw deferError;
+            }
+        }
         
         const confession = await db.getConfession(confessionId);
         if (!confession) {
@@ -346,6 +357,8 @@ async function handleConfessionReview(interaction, customId) {
                 flags: 64 // Ephemeral flag
             });
 
+        } else if (action === 'ai_reject') {
+            await handleAIReject(interaction, customId);
         } else if (action === 'edit') {
             // Hiển thị modal để chỉnh sửa
             await interaction.followUp({
@@ -511,5 +524,67 @@ async function handleTopConfessionsButton(interaction, customId) {
         } catch (replyError) {
             console.error("Không thể reply interaction:", replyError.message);
         }
+    }
+} 
+
+async function handleAIReject(interaction, customId) {
+    const confessionId = customId.split('_')[2]; // ai_reject_123 -> 123
+
+    try {
+        try {
+            await interaction.deferUpdate();
+        } catch (deferError) {
+            if (deferError.code !== 'InteractionAlreadyReplied') {
+                throw deferError;
+            }
+        }
+        
+        const confession = await db.getConfession(confessionId);
+        if (!confession) {
+            return interaction.followUp({
+                content: "❌ Không tìm thấy confession này!",
+                flags: 64
+            });
+        }
+
+        // Kiểm tra AI analysis
+        if (!confession.aiAnalysis) {
+            return interaction.followUp({
+                content: "❌ Confession này chưa được phân tích bởi AI!",
+                flags: 64
+            });
+        }
+
+        // Cập nhật trạng thái
+        await db.updateConfessionStatus(confessionId, 'rejected', interaction.user.id);
+
+        // Tạo embed thông báo AI reject
+        const embed = new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle('🤖 AI Rejected Confession')
+            .setDescription(`**Nội dung:**\n${confession.content}`)
+            .addFields(
+                { name: '🤖 AI Analysis', value: `**Safety:** ${confession.aiAnalysis.safety_level}\n**Score:** ${confession.aiAnalysis.score}/10\n**Reason:** ${confession.aiAnalysis.reason}`, inline: false },
+                { name: '👤 Người xác nhận', value: `<@${interaction.user.id}>`, inline: true },
+                { name: '⏰ Thời gian', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+            )
+            .setTimestamp();
+
+        await interaction.message.edit({
+            embeds: [embed],
+            components: []
+        });
+
+        await interaction.followUp({
+            content: `🤖 Đã từ chối confession theo khuyến nghị của AI!`,
+            flags: 64
+        });
+
+    } catch (error) {
+        console.error('Error handling AI reject:', error);
+        await interaction.followUp({
+            content: "❌ Đã xảy ra lỗi khi xử lý AI reject!",
+            flags: 64
+        });
     }
 } 

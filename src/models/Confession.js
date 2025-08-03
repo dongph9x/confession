@@ -26,6 +26,15 @@ const confessionSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    aiAnalysis: {
+        safety_level: String,
+        content_type: String,
+        score: Number,
+        reason: String,
+        recommendation: String,
+        confidence: Number,
+        analyzedAt: Date
+    },
     messageId: {
         type: String,
         default: null
