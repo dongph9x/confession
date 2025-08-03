@@ -182,6 +182,14 @@ class MongoDB {
         });
     }
 
+    async getConfessionByNumberAnyStatus(guildId, confessionNumber) {
+        const Confession = require('../models/Confession');
+        return await Confession.findOne({ 
+            guildId, 
+            confessionNumber
+        });
+    }
+
     async getConfessionStats(guildId) {
         const Confession = require('../models/Confession');
         const stats = await Confession.aggregate([

@@ -75,7 +75,7 @@ async function handleEmojiButton(interaction, customId) {
         }
 
         const confessionNumber = parseInt(titleMatch[1]);
-        const confession = await db.getConfessionByNumber(interaction.guild.id, confessionNumber);
+        const confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
         
         if (!confession) {
             try {
