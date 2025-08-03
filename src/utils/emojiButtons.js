@@ -1,16 +1,8 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { getEmojiConfig } = require("./emojiConfigs");
 
-// Emoji configuration
-const EMOJIS = {
-    heart: { emoji: "❤️", label: "Heart", style: ButtonStyle.Secondary },
-    laugh: { emoji: "😂", label: "Laugh", style: ButtonStyle.Secondary },
-    wow: { emoji: "😮", label: "Wow", style: ButtonStyle.Secondary },
-    sad: { emoji: "😢", label: "Sad", style: ButtonStyle.Secondary },
-    fire: { emoji: "🔥", label: "Fire", style: ButtonStyle.Secondary },
-    clap: { emoji: "👏", label: "Clap", style: ButtonStyle.Secondary },
-    pray: { emoji: "🙏", label: "Pray", style: ButtonStyle.Secondary },
-    love: { emoji: "💕", label: "Love", style: ButtonStyle.Secondary }
-};
+// Lấy cấu hình emoji mặc định
+const EMOJIS = getEmojiConfig();
 
 // Create emoji buttons
 function createEmojiButtons(counts = {}) {
