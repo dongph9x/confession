@@ -36,6 +36,7 @@
 - **Error handling** - Robust error handling and recovery
 - **Database backup** - Automatic database backups
 - **Configuration system** - Easy customization through config files
+- **Puppeteer rendering** - Create beautiful confession images from HTML templates
 
 ## 🚀 Quick Start
 

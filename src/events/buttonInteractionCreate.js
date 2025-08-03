@@ -42,9 +42,9 @@ async function handleEmojiButton(interaction, customId) {
     }
 
     try {
-        // Lấy confession ID từ message embed
-        const embed = interaction.message.embeds[0];
-        if (!embed || !embed.title) {
+        // Lấy confession ID từ message content (plain text format)
+        const messageContent = interaction.message.content;
+        if (!messageContent) {
             try {
                 await interaction.followUp({
                     content: "❌ Không tìm thấy confession!",
@@ -56,8 +56,8 @@ async function handleEmojiButton(interaction, customId) {
             return;
         }
 
-        // Tìm confession ID từ title (Confession #123)
-        const titleMatch = embed.title.match(/Confession #(\d+)/);
+        // Tìm confession ID từ content (Confession #123)
+        const titleMatch = messageContent.match(/Confession #(\d+)/);
         if (!titleMatch) {
             try {
                 await interaction.followUp({
@@ -122,24 +122,17 @@ async function handleEmojiButton(interaction, customId) {
             userReactions
         );
 
-        // Cập nhật message
+        // Cập nhật message với components mới
         try {
-            await interaction.editReply({
-                embeds: [embed],
+            await interaction.message.edit({
                 components: updatedComponents
             });
         } catch (updateError) {
-            console.error("Không thể edit reply:", updateError.message);
-            // Fallback: thử followUp nếu edit thất bại
-            try {
-                await interaction.followUp({
-                    content: `✅ ${result.action === 'added' ? 'Đã thêm' : 'Đã xóa'} emoji ${emojiKey}!`,
-                    flags: 64
-                });
-            } catch (replyError) {
-                console.error("Không thể followUp interaction:", replyError.message);
-            }
+            console.error("Không thể edit message:", updateError.message);
         }
+
+        // Không gửi thông báo - chỉ cập nhật emoji counts
+        // Thông báo đã được xóa theo yêu cầu
 
     } catch (error) {
         console.error('Error handling emoji button:', error);
@@ -209,36 +202,12 @@ async function handleConfessionReview(interaction, customId) {
             const confessionAuthor = await interaction.client.users.fetch(confession.userId);
             const isAnonymous = confession.isAnonymous;
 
-            // Tạo embed cho confession đã duyệt
-            const approvedEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle("💝 Confession #" + (guildSettings.confessionCounter + 1))
-                .setDescription(confession.content)
-                .addFields(
-                    { 
-                        name: "👤 Người gửi", 
-                        value: isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`, 
-                        inline: true 
-                    },
-                    { 
-                        name: "⏰ Thời gian", 
-                        value: `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`, 
-                        inline: true 
-                    }
-                )
-                .setFooter({
-                    text: `Confession Bot • ${interaction.guild.name}`,
-                    iconURL: interaction.guild.iconURL(),
-                })
-                .setTimestamp();
-
-            // Chỉ hiển thị author nếu không ở chế độ ẩn danh
-            if (!isAnonymous) {
-                approvedEmbed.setAuthor({
-                    name: confessionAuthor.username,
-                    iconURL: confessionAuthor.displayAvatarURL()
-                });
-            }
+            // Tạo plain text content cho confession đã duyệt (full width display)
+            const confessionNumber = guildSettings.confessionCounter + 1;
+            const timeString = `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`;
+            const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`;
+            
+            const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${confession.content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${interaction.guild.name}*`;
 
             // Tạo emoji buttons
             const { createEmojiButtons } = require("../utils/emojiButtons");
@@ -246,7 +215,7 @@ async function handleConfessionReview(interaction, customId) {
             const emojiButtons = createEmojiButtons(emojiCounts);
 
             const message = await confessionChannel.send({ 
-                embeds: [approvedEmbed],
+                content: plainTextContent,
                 components: emojiButtons
             });
 

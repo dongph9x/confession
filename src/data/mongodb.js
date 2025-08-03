@@ -262,62 +262,100 @@ class MongoDB {
     
     async getEmojiCounts(guildId, confessionId) {
         const EmojiReaction = require('../models/EmojiReaction');
+        const mongoose = require('mongoose');
         
-        const reactions = await EmojiReaction.aggregate([
-            { $match: { guildId, confessionId } },
-            { $group: { _id: '$emojiKey', count: { $sum: 1 } } }
-        ]);
-        
-        const counts = {};
-        reactions.forEach(reaction => {
-            counts[reaction._id] = reaction.count;
-        });
-        
-        return counts;
+        try {
+            // Convert string confessionId to ObjectId if needed
+            const objectId = mongoose.Types.ObjectId.isValid(confessionId) 
+                ? confessionId 
+                : new mongoose.Types.ObjectId(confessionId);
+            
+            // Get all reactions and count manually
+            const allReactions = await EmojiReaction.find({ guildId, confessionId: objectId });
+            
+            if (allReactions.length === 0) {
+                return {};
+            }
+            
+            const counts = {};
+            allReactions.forEach(reaction => {
+                if (!counts[reaction.emojiKey]) {
+                    counts[reaction.emojiKey] = 0;
+                }
+                counts[reaction.emojiKey]++;
+            });
+            
+            return counts;
+        } catch (error) {
+            console.error('❌ getEmojiCounts error:', error);
+            return {};
+        }
     }
     
     async getUserEmojiReactions(guildId, confessionId, userId) {
         const EmojiReaction = require('../models/EmojiReaction');
+        const mongoose = require('mongoose');
         
-        const reactions = await EmojiReaction.find({
-            guildId,
-            confessionId,
-            userId
-        });
-        
-        return reactions.map(reaction => reaction.emojiKey);
+        try {
+            // Convert string confessionId to ObjectId if needed
+            const objectId = mongoose.Types.ObjectId.isValid(confessionId) 
+                ? confessionId 
+                : new mongoose.Types.ObjectId(confessionId);
+            
+            const reactions = await EmojiReaction.find({
+                guildId,
+                confessionId: objectId,
+                userId
+            });
+            
+            return reactions.map(reaction => reaction.emojiKey);
+        } catch (error) {
+            console.error('❌ getUserEmojiReactions error:', error);
+            return [];
+        }
     }
     
     async toggleEmojiReaction(guildId, confessionId, userId, emojiKey) {
         const EmojiReaction = require('../models/EmojiReaction');
+        const mongoose = require('mongoose');
         
-        // Check if user already reacted
-        const existingReaction = await EmojiReaction.findOne({
-            guildId,
-            confessionId,
-            userId,
-            emojiKey
-        });
-        
-        if (existingReaction) {
-            // Remove reaction
-            await EmojiReaction.deleteOne({
+        try {
+            // Convert string confessionId to ObjectId if needed
+            const objectId = mongoose.Types.ObjectId.isValid(confessionId) 
+                ? confessionId 
+                : new mongoose.Types.ObjectId(confessionId);
+            
+            // Check if user already reacted
+            const existingReaction = await EmojiReaction.findOne({
                 guildId,
-                confessionId,
+                confessionId: objectId,
                 userId,
                 emojiKey
             });
-            return { action: 'removed', success: true };
-        } else {
-            // Add reaction
-            const reaction = new EmojiReaction({
-                guildId,
-                confessionId,
-                userId,
-                emojiKey
-            });
-            await reaction.save();
-            return { action: 'added', success: true };
+            
+            if (existingReaction) {
+                // Remove reaction
+                await EmojiReaction.deleteOne({
+                    guildId,
+                    confessionId: objectId,
+                    userId,
+                    emojiKey
+                });
+                return { action: 'removed', success: true };
+            } else {
+                // Add reaction
+                const reaction = new EmojiReaction({
+                    guildId,
+                    confessionId: objectId,
+                    userId,
+                    emojiKey
+                });
+                await reaction.save();
+                return { action: 'added', success: true };
+            }
+        } catch (error) {
+            console.error('❌ toggleEmojiReaction error:', error);
+            return { action: 'error', success: false };
         }
     }
 
