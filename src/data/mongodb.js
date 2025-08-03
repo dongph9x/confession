@@ -131,25 +131,15 @@ class MongoDB {
         }).sort({ createdAt: 1 });
     }
 
-    async updateConfessionStatus(confessionId, status, reviewedBy, messageId = null, threadId = null) {
+    async updateConfessionStatus(confessionId, status, reviewedBy, messageId = null, threadId = null, confessionNumber = null) {
         const Confession = require('../models/Confession');
-        const GuildSettings = require('../models/GuildSettings');
         
         const confession = await Confession.findById(confessionId);
         if (!confession) return null;
 
-        let confessionNumber = confession.confessionNumber;
-        
-        if (status === 'approved') {
-            // Tăng counter cho guild khi approve
-            const settings = await GuildSettings.findOneAndUpdate(
-                { guildId: confession.guildId },
-                { $inc: { confessionCounter: 1 } },
-                { new: true, upsert: true }
-            );
-            
-            // Cập nhật confession number thành counter mới
-            confessionNumber = settings ? settings.confessionCounter : confessionNumber + 1;
+        // Nếu không có confessionNumber được truyền vào, giữ nguyên số cũ
+        if (!confessionNumber) {
+            confessionNumber = confession.confessionNumber;
         }
 
         return await Confession.findByIdAndUpdate(confessionId, {
@@ -193,6 +183,21 @@ class MongoDB {
         return await Confession.findOne({ 
             guildId, 
             confessionNumber
+        });
+    }
+
+    async getConfessionByMessageId(messageId) {
+        const Confession = require('../models/Confession');
+        return await Confession.findOne({ 
+            messageId
+        });
+    }
+
+    async getApprovedConfessionsCount(guildId) {
+        const Confession = require('../models/Confession');
+        return await Confession.countDocuments({ 
+            guildId, 
+            status: 'approved' 
         });
     }
 

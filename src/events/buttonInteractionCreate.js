@@ -57,52 +57,49 @@ async function handleEmojiButton(interaction, customId) {
         console.log(`   Message content length: ${messageContent ? messageContent.length : 0}`);
         console.log(`   Message embeds: ${interaction.message.embeds.length}`);
         
-        // Method 1: Tìm từ message content
-        if (messageContent) {
-            const titleMatch = messageContent.match(/Confession #(\d+)/);
-            if (titleMatch) {
-                confessionNumber = parseInt(titleMatch[1]);
-                console.log(`   ✅ Found confession number from content: ${confessionNumber}`);
-            }
-        }
+        // Method 1: Tìm confession bằng messageId trước
+        let confession = await db.getConfessionByMessageId(interaction.message.id);
         
-        // Method 2: Tìm từ embeds nếu content rỗng
-        if (!confessionNumber && interaction.message.embeds.length > 0) {
-            const embed = interaction.message.embeds[0];
-            console.log(`   Checking embed: "${embed.title}"`);
-            
-            if (embed.title) {
-                const titleMatch = embed.title.match(/Confession #(\d+)/);
+        if (confession) {
+            console.log(`   ✅ Found confession by messageId: ${confession._id}`);
+        } else {
+            // Method 2: Tìm từ message content
+            if (messageContent) {
+                const titleMatch = messageContent.match(/Confession #(\d+)/);
                 if (titleMatch) {
-                    confessionNumber = parseInt(titleMatch[1]);
-                    console.log(`   ✅ Found confession number from embed title: ${confessionNumber}`);
+                    const confessionNumber = parseInt(titleMatch[1]);
+                    console.log(`   ✅ Found confession number from content: ${confessionNumber}`);
+                    confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
                 }
             }
             
-            if (!confessionNumber && embed.description) {
-                const descMatch = embed.description.match(/Confession #(\d+)/);
-                if (descMatch) {
-                    confessionNumber = parseInt(descMatch[1]);
-                    console.log(`   ✅ Found confession number from embed description: ${confessionNumber}`);
+            // Method 3: Tìm từ embeds nếu content rỗng
+            if (!confession && interaction.message.embeds.length > 0) {
+                const embed = interaction.message.embeds[0];
+                console.log(`   Checking embed: "${embed.title}"`);
+                
+                if (embed.title) {
+                    const titleMatch = embed.title.match(/Confession #(\d+)/);
+                    if (titleMatch) {
+                        const confessionNumber = parseInt(titleMatch[1]);
+                        console.log(`   ✅ Found confession number from embed title: ${confessionNumber}`);
+                        confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
+                    }
+                }
+                
+                if (!confession && embed.description) {
+                    const descMatch = embed.description.match(/Confession #(\d+)/);
+                    if (descMatch) {
+                        const confessionNumber = parseInt(descMatch[1]);
+                        console.log(`   ✅ Found confession number from embed description: ${confessionNumber}`);
+                        confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
+                    }
                 }
             }
         }
         
-        // Method 3: Tìm từ custom ID của button (fallback)
-        if (!confessionNumber) {
-            // Extract confession ID from button custom ID if available
-            const customIdParts = customId.split('_');
-            if (customIdParts.length > 1) {
-                const possibleConfessionId = customIdParts[customIdParts.length - 1];
-                if (possibleConfessionId && !isNaN(possibleConfessionId)) {
-                    confessionNumber = parseInt(possibleConfessionId);
-                    console.log(`   ✅ Found confession number from custom ID: ${confessionNumber}`);
-                }
-            }
-        }
-        
-        if (!confessionNumber) {
-            console.log(`   ❌ No confession number found`);
+        if (!confession) {
+            console.log(`   ❌ No confession found`);
             try {
                 await interaction.followUp({
                     content: "❌ Không thể xác định confession!",
@@ -114,8 +111,7 @@ async function handleEmojiButton(interaction, customId) {
             return;
         }
         
-        console.log(`   🔍 Looking for confession #${confessionNumber} in guild ${interaction.guild.id}`);
-        const confession = await db.getConfessionByNumberAnyStatus(interaction.guild.id, confessionNumber);
+        console.log(`   ✅ Found confession: ${confession._id} (Number: ${confession.confessionNumber})`);
         
         if (!confession) {
             console.log(`   ❌ Confession #${confessionNumber} not found in database`);
@@ -185,6 +181,34 @@ async function handleEmojiButton(interaction, customId) {
             });
         } catch (updateError) {
             console.error("Không thể edit message:", updateError.message);
+        }
+
+        // Tạo thread khi click emoji (nếu chưa có thread)
+        const existingThread = interaction.message.thread;
+        if (!existingThread) {
+            console.log(`🧵 Creating thread for confession #${confession.confessionNumber}...`);
+            
+            try {
+                const thread = await interaction.message.startThread({
+                    name: `💬 Bình luận Confession #${confession.confessionNumber}`,
+                    autoArchiveDuration: 1440, // 24 giờ
+                    reason: 'Thread được tạo bởi emoji reaction'
+                });
+
+                console.log(`✅ Thread created: ${thread.id}`);
+
+                // Cập nhật database với thread ID
+                await db.updateConfessionStatus(confession._id, 'approved', null, interaction.message.id, thread.id);
+
+                // Thông báo trong thread
+                await thread.send(`💬 Thread được tạo khi có emoji reaction! Bạn có thể bình luận ở đây.`);
+                
+                console.log(`✅ Thread setup complete for confession #${confession.confessionNumber}`);
+            } catch (threadError) {
+                console.error('Error creating thread:', threadError);
+            }
+        } else {
+            console.log(`⚠️ Thread already exists for confession #${confession.confessionNumber}`);
         }
 
         // Không gửi thông báo - chỉ cập nhật emoji counts
@@ -258,8 +282,10 @@ async function handleConfessionReview(interaction, customId) {
             const confessionAuthor = await interaction.client.users.fetch(confession.userId);
             const isAnonymous = confession.isAnonymous;
 
-            // Tạo plain text content cho confession đã duyệt (full width display)
-            const confessionNumber = guildSettings.confessionCounter + 1;
+            // Lấy số confession thực tế từ database
+            const approvedConfessionsCount = await db.getApprovedConfessionsCount(interaction.guild.id);
+            const confessionNumber = approvedConfessionsCount + 1;
+            
             const timeString = `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`;
             const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`;
             
@@ -275,15 +301,8 @@ async function handleConfessionReview(interaction, customId) {
                 components: emojiButtons
             });
 
-            // Tạo thread cho confession để người dùng có thể bình luận
-            const thread = await message.startThread({
-                name: `💬 Bình luận Confession #${guildSettings.confessionCounter + 1}`,
-                autoArchiveDuration: 1440, // 24 giờ
-                reason: 'Thread cho confession'
-            });
-
-            // Cập nhật trạng thái trong database với message ID và thread ID
-            await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
+            // Cập nhật confession với number mới và message ID
+            await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, null, confessionNumber);
 
             // Cập nhật embed gốc
             const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
