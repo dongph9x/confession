@@ -86,45 +86,9 @@ const init = async () => {
         await db.connect();
         logger.info("✅ MongoDB connected");
 
-        // Khởi tạo music client
-        try {
-            client.music = new Kazagumo(
-                {
-                    defaultSearchEngine: "youtube",
-                    send: (guildId, payload) => {
-                        const guild = client.guilds.cache.get(guildId);
-                        if (guild) guild.shard.send(payload);
-                    },
-                },
-                new Connectors.DiscordJS(client),
-                [
-                    {
-                        name: "Main Node",
-                        url: process.env.LAVALINK_URL || "localhost:2333",
-                        auth: process.env.LAVALINK_AUTH || "youshallnotpass",
-                        secure: false,
-                    },
-                ]
-            );
-            
-            // Set global reference for music commands
-            global.kazagumo = client.music;
-            
-            // Xử lý lỗi Shoukaku
-            client.music.shoukaku.on('error', (_, error) => {
-                logger.warn('Lavalink connection error:', error.message);
-            });
-            
-            client.music.shoukaku.on('disconnect', (_, reason) => {
-                logger.warn('Lavalink disconnected:', reason);
-            });
-            
-            logger.info("✅ Music client initialized");
-        } catch (error) {
-            logger.warn("⚠️ Could not initialize music client (Lavalink server not available)");
-            logger.info("💡 To use music features, run a Lavalink server");
-            global.kazagumo = null;
-        }
+        // Music client disabled - Lavalink not needed
+        global.kazagumo = null;
+        logger.info("✅ Music client disabled (Lavalink not needed)");
 
         // Load commands
         await loadSlashCommands();

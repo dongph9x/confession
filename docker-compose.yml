@@ -35,22 +35,7 @@ services:
     networks:
       - bot-network
 
-  # Lavalink Music Server (Optional)
-  lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4
-    container_name: confession-lavalink
-    restart: unless-stopped
-    environment:
-      SERVER_PORT: 2333
-      LAVALINK_SERVER_PASSWORD: ${LAVALINK_AUTH:-youshallnotpass}
-    volumes:
-      - ./lavalink-application.yml:/opt/Lavalink/application.yml
-    ports:
-      - "2333:2333"
-    networks:
-      - bot-network
-    profiles:
-      - music
+
 
 volumes:
   mongodb_data:

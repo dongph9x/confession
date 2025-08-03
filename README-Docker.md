@@ -67,10 +67,7 @@ docker-compose logs -f mongodb
 - **Port**: 27017
 - **Data**: Persistent volume `mongodb_data`
 
-### Lavalink (Optional)
-- **Container**: `confession-lavalink`
-- **Port**: 2333
-- **Profile**: music
+
 
 ## Commands
 
@@ -78,9 +75,6 @@ docker-compose logs -f mongodb
 ```bash
 # Start all services
 docker-compose up -d
-
-# Start with music server
-docker-compose --profile music up -d
 ```
 
 ### Stop Services
@@ -127,8 +121,7 @@ docker cp confession-mongodb:/data/backup ./backup
 | `BOT_TOKEN` | Discord Bot Token | Yes |
 | `CLIENT_ID` | Discord Client ID | Yes |
 | `MONGODB_URI` | MongoDB connection string | Yes |
-| `LAVALINK_URL` | Lavalink server URL | No |
-| `LAVALINK_AUTH` | Lavalink authentication | No |
+
 | `NODE_ENV` | Node environment | No |
 | `LOG_LEVEL` | Logging level | No |
 
