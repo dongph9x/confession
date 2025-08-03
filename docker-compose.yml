@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Discord Bot Service
+  discord-bot:
+    build: .
+    container_name: confession-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./logs:/app/logs
+      - ./src:/app/src
+    depends_on:
+      - mongodb
+    networks:
+      - bot-network
+
+  # MongoDB Service
+  mongodb:
+    image: mongo:7.0
+    container_name: confession-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-confession_bot}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    ports:
+      - "27017:27017"
+    networks:
+      - bot-network
+
+  # Lavalink Music Server (Optional)
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: confession-lavalink
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_AUTH:-youshallnotpass}
+    volumes:
+      - ./lavalink-application.yml:/opt/Lavalink/application.yml
+    ports:
+      - "2333:2333"
+    networks:
+      - bot-network
+    profiles:
+      - music
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  bot-network:
+    driver: bridge 
