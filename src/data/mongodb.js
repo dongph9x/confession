@@ -89,11 +89,24 @@ class MongoDB {
     // Confession Methods
     async addConfession(guildId, userId, content, isAnonymous = false) {
         const Confession = require('../models/Confession');
+        const GuildSettings = require('../models/GuildSettings');
+        
+        // Lấy guild settings để tăng confession counter
+        let guildSettings = await GuildSettings.findOne({ guildId });
+        if (!guildSettings) {
+            guildSettings = new GuildSettings({ guildId, confessionCounter: 0 });
+        }
+        
+        // Tăng confession counter
+        guildSettings.confessionCounter += 1;
+        await guildSettings.save();
+        
         const confession = new Confession({
             guildId,
             userId,
             content,
-            isAnonymous
+            isAnonymous,
+            confessionNumber: guildSettings.confessionCounter
         });
         await confession.save();
         return confession._id;
@@ -165,8 +178,7 @@ class MongoDB {
         const Confession = require('../models/Confession');
         return await Confession.findOne({ 
             guildId, 
-            confessionNumber, 
-            status: 'approved' 
+            confessionNumber
         });
     }
 
@@ -315,6 +327,254 @@ class MongoDB {
         const Comment = require('../models/Comment');
         
         return await Comment.findById(commentId);
+    }
+
+    async getCommentByMessageId(messageId) {
+        const Comment = require('../models/Comment');
+        
+        return await Comment.findOne({ messageId });
+    }
+
+    // Top Confessions Methods
+    async getTopConfessionsByReactions(guildId, limit = 10) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        const Confession = require('../models/Confession');
+        
+        try {
+            // Aggregate để đếm reactions theo confession
+            const topReactions = await EmojiReaction.aggregate([
+                { $match: { guildId } },
+                { $group: { 
+                    _id: '$confessionId', 
+                    reactionCount: { $sum: 1 },
+                    uniqueUsers: { $addToSet: '$userId' }
+                }},
+                { $project: {
+                    confessionId: '$_id',
+                    reactionCount: 1,
+                    uniqueUsersCount: { $size: '$uniqueUsers' }
+                }},
+                { $sort: { reactionCount: -1 } },
+                { $limit: limit }
+            ]);
+
+            // Lấy thông tin confession cho mỗi top reaction
+            const topConfessions = [];
+            for (const reaction of topReactions) {
+                const confession = await Confession.findById(reaction.confessionId);
+                if (confession) {
+                    topConfessions.push({
+                        confessionId: reaction.confessionId,
+                        confessionNumber: confession.confessionNumber || 'Unknown',
+                        content: confession.content,
+                        userId: confession.userId,
+                        isAnonymous: confession.isAnonymous,
+                        createdAt: confession.createdAt,
+                        reactionCount: reaction.reactionCount,
+                        uniqueUsersCount: reaction.uniqueUsersCount
+                    });
+                }
+            }
+
+            return topConfessions;
+        } catch (error) {
+            console.error('❌ getTopConfessionsByReactions error:', error);
+            return [];
+        }
+    }
+
+    async getTopConfessionsByComments(guildId, limit = 10) {
+        const Comment = require('../models/Comment');
+        const Confession = require('../models/Confession');
+        
+        try {
+            // Aggregate để đếm comments theo confession
+            const topComments = await Comment.aggregate([
+                { $match: { guildId, isDeleted: false } },
+                { $group: { 
+                    _id: '$confessionId', 
+                    commentCount: { $sum: 1 },
+                    uniqueUsers: { $addToSet: '$userId' }
+                }},
+                { $project: {
+                    confessionId: '$_id',
+                    commentCount: 1,
+                    uniqueUsersCount: { $size: '$uniqueUsers' }
+                }},
+                { $sort: { commentCount: -1 } },
+                { $limit: limit }
+            ]);
+
+            // Lấy thông tin confession cho mỗi top comment
+            const topConfessions = [];
+            for (const comment of topComments) {
+                const confession = await Confession.findById(comment.confessionId);
+                if (confession) {
+                    topConfessions.push({
+                        confessionId: comment.confessionId,
+                        confessionNumber: confession.confessionNumber || 'Unknown',
+                        content: confession.content,
+                        userId: confession.userId,
+                        isAnonymous: confession.isAnonymous,
+                        createdAt: confession.createdAt,
+                        commentCount: comment.commentCount,
+                        uniqueUsersCount: comment.uniqueUsersCount
+                    });
+                }
+            }
+
+            return topConfessions;
+        } catch (error) {
+            console.error('❌ getTopConfessionsByComments error:', error);
+            return [];
+        }
+    }
+
+    async getTopConfessionsByEngagement(guildId, limit = 10) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        const Comment = require('../models/Comment');
+        const Confession = require('../models/Confession');
+        
+        try {
+            // Aggregate reactions
+            const reactionStats = await EmojiReaction.aggregate([
+                { $match: { guildId } },
+                { $group: { 
+                    _id: '$confessionId', 
+                    reactionCount: { $sum: 1 }
+                }}
+            ]);
+
+            // Aggregate comments
+            const commentStats = await Comment.aggregate([
+                { $match: { guildId, isDeleted: false } },
+                { $group: { 
+                    _id: '$confessionId', 
+                    commentCount: { $sum: 1 }
+                }}
+            ]);
+
+            // Combine và tính tổng engagement
+            const engagementMap = new Map();
+            
+            // Add reactions
+            reactionStats.forEach(stat => {
+                engagementMap.set(stat._id.toString(), {
+                    confessionId: stat._id,
+                    reactionCount: stat.reactionCount,
+                    commentCount: 0,
+                    totalEngagement: stat.reactionCount
+                });
+            });
+
+            // Add comments
+            commentStats.forEach(stat => {
+                const confessionId = stat._id.toString();
+                if (engagementMap.has(confessionId)) {
+                    const existing = engagementMap.get(confessionId);
+                    existing.commentCount = stat.commentCount;
+                    existing.totalEngagement += stat.commentCount;
+                } else {
+                    engagementMap.set(confessionId, {
+                        confessionId: stat._id,
+                        reactionCount: 0,
+                        commentCount: stat.commentCount,
+                        totalEngagement: stat.commentCount
+                    });
+                }
+            });
+
+            // Sort by total engagement
+            const topEngagement = Array.from(engagementMap.values())
+                .sort((a, b) => b.totalEngagement - a.totalEngagement)
+                .slice(0, limit);
+
+            // Lấy thông tin confession
+            const topConfessions = [];
+            for (const engagement of topEngagement) {
+                const confession = await Confession.findById(engagement.confessionId);
+                if (confession) {
+                    topConfessions.push({
+                        confessionId: engagement.confessionId,
+                        confessionNumber: confession.confessionNumber || 'Unknown',
+                        content: confession.content,
+                        userId: confession.userId,
+                        isAnonymous: confession.isAnonymous,
+                        createdAt: confession.createdAt,
+                        reactionCount: engagement.reactionCount,
+                        commentCount: engagement.commentCount,
+                        totalEngagement: engagement.totalEngagement
+                    });
+                }
+            }
+
+            return topConfessions;
+        } catch (error) {
+            console.error('❌ getTopConfessionsByEngagement error:', error);
+            return [];
+        }
+    }
+
+    async getConfessionEngagementStats(guildId, confessionId) {
+        const EmojiReaction = require('../models/EmojiReaction');
+        const Comment = require('../models/Comment');
+        
+        try {
+            // Count reactions
+            const reactionCount = await EmojiReaction.countDocuments({
+                guildId,
+                confessionId
+            });
+
+            // Count unique users who reacted
+            const uniqueUsersReacted = await EmojiReaction.distinct('userId', {
+                guildId,
+                confessionId
+            });
+
+            // Count comments
+            const commentCount = await Comment.countDocuments({
+                guildId,
+                confessionId,
+                isDeleted: false
+            });
+
+            // Count unique users who commented
+            const uniqueUsersCommented = await Comment.distinct('userId', {
+                guildId,
+                confessionId,
+                isDeleted: false
+            });
+
+            // Get reaction breakdown
+            const reactionBreakdown = await EmojiReaction.aggregate([
+                { $match: { guildId, confessionId } },
+                { $group: { 
+                    _id: '$emojiKey', 
+                    count: { $sum: 1 }
+                }},
+                { $sort: { count: -1 } }
+            ]);
+
+            return {
+                reactionCount,
+                uniqueUsersReacted: uniqueUsersReacted.length,
+                commentCount,
+                uniqueUsersCommented: uniqueUsersCommented.length,
+                totalEngagement: reactionCount + commentCount,
+                reactionBreakdown
+            };
+        } catch (error) {
+            console.error('❌ getConfessionEngagementStats error:', error);
+            return {
+                reactionCount: 0,
+                uniqueUsersReacted: 0,
+                commentCount: 0,
+                uniqueUsersCommented: 0,
+                totalEngagement: 0,
+                reactionBreakdown: []
+            };
+        }
     }
 
     // Emoji Reaction Methods
