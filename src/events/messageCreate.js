@@ -60,7 +60,14 @@ async function handleConfessionReminder(message) {
 
     try {
         // Xóa message gốc
-        await message.delete();
+        await message.delete().catch(error => {
+            // Bỏ qua lỗi nếu message đã bị xóa hoặc không tồn tại
+            if (error.code === 10008 || error.code === 10003) {
+                console.log(`📝 [REMINDER] Message đã bị xóa hoặc không tồn tại: ${error.message}`);
+            } else {
+                console.error("❌ [REMINDER] Lỗi khi xóa message:", error);
+            }
+        });
         
         // Gửi embed nhắc nhở
         const reminderMsg = await message.channel.send({
@@ -73,11 +80,16 @@ async function handleConfessionReminder(message) {
             try {
                 await reminderMsg.delete();
             } catch (error) {
-                console.log("Could not delete reminder message:", error.message);
+                // Bỏ qua lỗi nếu message đã bị xóa
+                if (error.code === 10008 || error.code === 10003) {
+                    console.log(`📝 [REMINDER] Reminder message đã bị xóa: ${error.message}`);
+                } else {
+                    console.log("Could not delete reminder message:", error.message);
+                }
             }
         }, 10000);
 
     } catch (error) {
-        console.error("Error handling confession reminder:", error);
+        console.error("❌ [REMINDER] Error handling confession reminder:", error);
     }
 }

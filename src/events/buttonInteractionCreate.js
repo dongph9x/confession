@@ -300,20 +300,50 @@ async function handleConfessionReview(interaction, customId) {
             const timeString = `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`;
             const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`;
             
-            const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${confession.content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${interaction.guild.name}*`;
+            // Import forum utilities
+            const { 
+                isForumChannel, 
+                createConfessionThread
+            } = require("../utils/forumChannel");
 
-            // Tạo emoji buttons
-            const { createEmojiButtons } = require("../utils/emojiButtons");
-            const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
-            const emojiButtons = createEmojiButtons(emojiCounts);
+            // Kiểm tra xem channel có phải là forum không
+            if (isForumChannel(confessionChannel)) {
+                // Sử dụng forum channel
+                console.log(`📝 [FORUM] Sử dụng forum channel cho confession #${confessionNumber}`);
+                
+                // Tạo thread trong forum
+                const thread = await createConfessionThread(confessionChannel, {
+                    confessionNumber,
+                    content: confession.content,
+                    guildName: interaction.guild.name,
+                    isAnonymous: isAnonymous,
+                    userId: confession.userId,
+                    aiAnalysis: confession.aiAnalysis
+                });
 
-            const message = await confessionChannel.send({ 
-                content: plainTextContent,
-                components: emojiButtons
-            });
+                console.log(`✅ [FORUM] Đã tạo thread cho confession #${confessionNumber} trong forum`);
 
-            // Cập nhật confession với number mới và message ID
-            await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, null, confessionNumber);
+                // Cập nhật confession với thread ID thay vì message ID
+                await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, thread.id, null, confessionNumber);
+            } else {
+                // Sử dụng channel thông thường (fallback)
+                console.log(`📝 [CHANNEL] Sử dụng channel thông thường cho confession #${confessionNumber}`);
+                
+                const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${confession.content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${interaction.guild.name}*`;
+
+                // Tạo emoji buttons
+                const { createEmojiButtons } = require("../utils/emojiButtons");
+                const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
+                const emojiButtons = createEmojiButtons(emojiCounts);
+
+                const message = await confessionChannel.send({ 
+                    content: plainTextContent,
+                    components: emojiButtons
+                });
+
+                // Cập nhật confession với message ID
+                await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, null, confessionNumber);
+            }
 
             // Cập nhật embed gốc
             const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])

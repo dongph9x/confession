@@ -269,16 +269,43 @@ module.exports = {
                     const timeString = `<t:${Math.floor(Date.now() / 1000)}:R>`;
                     const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${message.author.id}>`;
                     
-                    const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${message.guild.name}*`;
+                    // Import forum utilities
+                    const { 
+                        isForumChannel, 
+                        createConfessionThread
+                    } = require("../../utils/forumChannel");
 
-                    const { createEmojiButtons } = require("../../utils/emojiButtons");
-                    const emojiCounts = await db.getEmojiCounts(message.guild.id, confessionId);
-                    const emojiButtons = createEmojiButtons(emojiCounts);
+                    // Kiểm tra xem channel có phải là forum không
+                    if (isForumChannel(confessionChannel)) {
+                        // Sử dụng forum channel
+                        console.log(`📝 [FORUM] Sử dụng forum channel cho confession #${confessionNumber}`);
+                        
+                        // Tạo thread trong forum
+                        const thread = await createConfessionThread(confessionChannel, {
+                            confessionNumber,
+                            content,
+                            guildName: message.guild.name,
+                            isAnonymous: isAnonymous,
+                            userId: message.author.id,
+                            aiAnalysis: aiAnalysis
+                        });
 
-                    await confessionChannel.send({ 
-                        content: plainTextContent,
-                        components: emojiButtons
-                    });
+                        console.log(`✅ [FORUM] Đã tạo thread cho confession #${confessionNumber} trong forum`);
+                    } else {
+                        // Sử dụng channel thông thường (fallback)
+                        console.log(`📝 [CHANNEL] Sử dụng channel thông thường cho confession #${confessionNumber}`);
+                        
+                        const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${message.guild.name}*`;
+
+                        const { createEmojiButtons } = require("../../utils/emojiButtons");
+                        const emojiCounts = await db.getEmojiCounts(message.guild.id, confessionId);
+                        const emojiButtons = createEmojiButtons(emojiCounts);
+
+                        await confessionChannel.send({ 
+                            content: plainTextContent,
+                            components: emojiButtons
+                        });
+                    }
 
                     await db.updateConfessionStatus(confessionId, 'approved', 'AI System', null, null, confessionNumber);
                 }
