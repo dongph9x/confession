@@ -128,6 +128,18 @@ TRẢ LỜI THEO FORMAT JSON:
             description: `**Score:** ${score}/10\n**Type:** ${content_type}\n**Reason:** ${reason}\n**Recommendation:** ${recommendation}\n**Confidence:** ${(confidence * 100).toFixed(1)}%`
         };
     }
+
+    // Static method để tương thích với code hiện tại
+    static async analyzeContent(content) {
+        const analyzer = new AIContentAnalyzer();
+        const result = await analyzer.analyzeConfession(content);
+        
+        if (result.success) {
+            return result.analysis;
+        } else {
+            throw new Error(result.error || 'AI analysis failed');
+        }
+    }
 }
 
 module.exports = AIContentAnalyzer; 

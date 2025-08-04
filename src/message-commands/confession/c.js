@@ -1,0 +1,292 @@
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const db = require("../../data/mongodb");
+const config = require("../../config/bot");
+const AIContentAnalyzer = require('../../utils/aiContentAnalyzer');
+
+module.exports = {
+    name: "c",
+    description: "Gửi confession ngắn gọn (alias cho !confess)",
+    async execute(message, args) {
+        // Xóa tin nhắn gốc với error handling
+        try {
+            await message.delete();
+        } catch (error) {
+            // Bỏ qua lỗi nếu không thể xóa tin nhắn
+            console.log("Could not delete message:", error.message);
+        }
+
+        // Kiểm tra argument cho chế độ ẩn danh
+        let isAnonymous = false;
+        let content = args.join(" ");
+        
+        // Kiểm tra flag ẩn danh
+        if (args.length > 0 && (args[0] === "anonymous" || args[0] === "anon" || args[0] === "ẩn")) {
+            isAnonymous = true;
+            content = args.slice(1).join(" ");
+        }
+
+        if (!content) {
+            const errorMsg = await message.channel.send(
+                "❌ Vui lòng nhập nội dung confession!\n\n**Cách sử dụng:**\n`!c nội dung` - Gửi confession bình thường\n`!c anonymous nội dung` - Gửi confession ẩn danh\n`!c anon nội dung` - Gửi confession ẩn danh"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {}); // Bỏ qua lỗi nếu không thể xóa
+            }, 8000);
+            return;
+        }
+
+        // Kiểm tra xem user đã có confession đang chờ duyệt chưa
+        const pendingConfessions = await db.getUserPendingConfessions(message.guild.id, message.author.id);
+        if (pendingConfessions.length > 0) {
+            const oldestPending = pendingConfessions[0];
+            const timeAgo = Math.floor((Date.now() - new Date(oldestPending.createdAt).getTime()) / 1000 / 60); // phút
+            
+            const errorMsg = await message.channel.send(
+                `❌ Bạn đã có confession đang chờ duyệt!\n\n\`#${oldestPending._id}\` - ${oldestPending.content.substring(0, 50)}${oldestPending.content.length > 50 ? '...' : ''}\n\n⏰ Đã gửi ${timeAgo} phút trước\n\nVui lòng chờ confession này được duyệt hoặc từ chối trước khi gửi confession mới.`
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 10000);
+            return;
+        }
+
+        // Kiểm tra độ dài confession
+        if (content.length > config.confession.maxLength) {
+            const errorMsg = await message.channel.send(
+                `❌ Confession quá dài! Tối đa ${config.confession.maxLength} ký tự.`
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        if (content.length < config.confession.minLength) {
+            const errorMsg = await message.channel.send(
+                `❌ Confession quá ngắn! Tối thiểu ${config.confession.minLength} ký tự.`
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        const guildSettings = await db.getGuildSettings(message.guild.id);
+        if (!guildSettings?.reviewChannel) {
+            const errorMsg = await message.channel.send(
+                "❌ Kênh review confession chưa được thiết lập! Hãy nhờ Admin sử dụng lệnh `!setreview`"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        const reviewChannel = message.guild.channels.cache.get(
+            guildSettings.reviewChannel
+        );
+        if (!reviewChannel) {
+            const errorMsg = await message.channel.send(
+                "❌ Không tìm thấy kênh review! Có thể kênh đã bị xóa."
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+            return;
+        }
+
+        try {
+            // Lưu confession vào database với thông tin ẩn danh
+            const confessionId = await db.addConfession(
+                message.guild.id,
+                message.author.id,
+                content,
+                isAnonymous
+            );
+
+            console.log(`📝 [CONFESSION] Confession ${confessionId} được tạo bởi ${message.author.tag} (${isAnonymous ? 'Ẩn danh' : 'Hiển thị tên'})`);
+
+            // Phân tích nội dung bằng AI
+            let aiAnalysis = null;
+            let autoAction = null;
+            let needsAdminReview = true;
+            let reviewReason = "Cần admin review";
+            let aiEmbed = null;
+
+            try {
+                aiAnalysis = await AIContentAnalyzer.analyzeContent(content);
+                console.log(`🤖 [AI] Confession ${confessionId} được phân tích: ${aiAnalysis.safety_level} (${aiAnalysis.score}/10)`);
+
+                // Quyết định tự động dựa trên AI analysis
+                if (aiAnalysis.recommendation === 'REJECT') {
+                    autoAction = 'reject';
+                    needsAdminReview = false;
+                    reviewReason = "AI tự động từ chối";
+                } else if (aiAnalysis.recommendation === 'APPROVE' && aiAnalysis.safety_level === 'APPROPRIATE' && aiAnalysis.score <= 3) {
+                    // Chỉ auto-approve khi score <= 3 (rất phù hợp)
+                    autoAction = 'approve';
+                    needsAdminReview = false;
+                    reviewReason = "AI tự động duyệt";
+                } else if (aiAnalysis.safety_level === 'INAPPROPRIATE' || aiAnalysis.score >= 7) {
+                    // Tự động reject nếu INAPPROPRIATE hoặc score cao
+                    autoAction = 'reject';
+                    needsAdminReview = false;
+                    reviewReason = "AI tự động từ chối (inappropriate/high score)";
+                } else {
+                    autoAction = 'review';
+                    needsAdminReview = true;
+                    reviewReason = "AI khuyến nghị review";
+                }
+
+                // Tạo AI embed
+                aiEmbed = new EmbedBuilder()
+                    .setColor(0x00FF00)
+                    .setTitle('🤖 AI Analysis')
+                    .addFields(
+                        { name: '📊 Score', value: `${aiAnalysis.score}/10`, inline: true },
+                        { name: '🛡️ Safety Level', value: aiAnalysis.safety_level, inline: true },
+                        { name: '📝 Content Type', value: aiAnalysis.content_type, inline: true },
+                        { name: '💡 Recommendation', value: aiAnalysis.recommendation, inline: true },
+                        { name: '📋 Reason', value: aiAnalysis.reason, inline: false }
+                    )
+                    .setTimestamp();
+
+            } catch (aiError) {
+                console.error('❌ [AI] Lỗi khi phân tích nội dung:', aiError);
+                aiAnalysis = null;
+                needsAdminReview = true;
+                reviewReason = "Lỗi AI - Cần admin review";
+            }
+
+            // Tạo embed cho review
+            const reviewEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle(`📝 Confession #${confessionId}`)
+                .setDescription(content)
+                .addFields(
+                    { name: "👤 Người gửi", value: isAnonymous ? "🕵️ Ẩn danh" : `<@${message.author.id}>`, inline: true },
+                    { name: "⏰ Thời gian", value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                    { name: "🔍 Trạng thái", value: isAnonymous ? "Ẩn danh" : "Hiển thị tên", inline: true },
+                    { name: "🤖 AI Analysis", value: aiAnalysis ? `${aiAnalysis.safety_level} (${aiAnalysis.score}/10)` : "Không có", inline: true },
+                    { name: "📋 Lý do review", value: reviewReason, inline: true }
+                )
+                .setFooter({
+                    text: `Confession Bot • ${message.guild.name}`,
+                    iconURL: message.guild.iconURL(),
+                })
+                .setTimestamp();
+
+            // Tạo buttons
+            const buttons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`confession_review_${confessionId}_approve`)
+                        .setLabel("✅ Duyệt")
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`confession_review_${confessionId}_reject`)
+                        .setLabel("❌ Từ chối")
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId(`confession_review_${confessionId}_edit`)
+                        .setLabel("✏️ Chỉnh sửa")
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            if (needsAdminReview) {
+                // Gửi message với AI analysis
+                const messageData = {
+                    content: `📝 Confession mới từ **${message.author.username}** (${message.author.tag}) cần duyệt!`,
+                    embeds: [reviewEmbed],
+                    components: [buttons]
+                };
+
+                // Thêm AI analysis embed nếu có
+                if (aiEmbed) {
+                    messageData.embeds.push(aiEmbed);
+                }
+
+                await reviewChannel.send(messageData);
+                console.log(`📝 [REVIEW] Confession ${confessionId} gửi đến review channel: ${reviewReason}`);
+            } else {
+                console.log(`🤖 [AUTO] Confession ${confessionId} ${autoAction === 'approve' ? 'approved' : 'rejected'} bởi AI`);
+            }
+
+            // Thông báo cho user
+            let userMessage = `✅ Confession của bạn đã được gửi để duyệt! ${isAnonymous ? '🕵️ Confession sẽ được đăng ẩn danh.' : '👤 Confession sẽ hiển thị tên của bạn.'}\n\nBạn sẽ được thông báo khi confession được duyệt hoặc từ chối.`;
+            
+            if (autoAction === 'reject') {
+                userMessage = `❌ Confession của bạn đã bị từ chối vì nội dung không phù hợp.\n\n🤖 **Lý do từ AI:** ${aiAnalysis.reason}\n📊 **Độ nghiêm trọng:** ${aiAnalysis.score}/10\n🛡️ **Loại nội dung:** ${aiAnalysis.content_type}`;
+                // Cập nhật trạng thái confession thành rejected
+                await db.updateConfessionStatus(confessionId, 'rejected', 'AI System');
+            } else if (autoAction === 'approve') {
+                userMessage = "✅ Confession của bạn đã được AI tự động duyệt!";
+                // Tự động approve và gửi đến confession channel
+                const confessionChannel = message.guild.channels.cache.get(guildSettings.confessionChannel);
+                
+                if (confessionChannel) {
+                    const approvedConfessionsCount = await db.getApprovedConfessionsCount(message.guild.id);
+                    const confessionNumber = approvedConfessionsCount + 1;
+                    
+                    const timeString = `<t:${Math.floor(Date.now() / 1000)}:R>`;
+                    const authorString = isAnonymous ? "🕵️ Ẩn danh" : `<@${message.author.id}>`;
+                    
+                    // Import forum utilities
+                    const { 
+                        isForumChannel, 
+                        createConfessionThread
+                    } = require("../../utils/forumChannel");
+
+                    // Kiểm tra xem channel có phải là forum không
+                    if (isForumChannel(confessionChannel)) {
+                        // Sử dụng forum channel
+                        console.log(`📝 [FORUM] Sử dụng forum channel cho confession #${confessionNumber}`);
+                        
+                        // Tạo thread trong forum
+                        const thread = await createConfessionThread(confessionChannel, {
+                            confessionNumber,
+                            content,
+                            guildName: message.guild.name,
+                            isAnonymous: isAnonymous,
+                            userId: message.author.id,
+                            aiAnalysis: aiAnalysis
+                        });
+
+                        console.log(`✅ [FORUM] Đã tạo thread cho confession #${confessionNumber} trong forum`);
+                    } else {
+                        // Sử dụng channel thông thường (fallback)
+                        console.log(`📝 [CHANNEL] Sử dụng channel thông thường cho confession #${confessionNumber}`);
+                        
+                        const plainTextContent = `📢 **Confession #${confessionNumber}**\n\n${content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${message.guild.name}*`;
+
+                        const { createEmojiButtons } = require("../../utils/emojiButtons");
+                        const emojiCounts = await db.getEmojiCounts(message.guild.id, confessionId);
+                        const emojiButtons = createEmojiButtons(emojiCounts);
+
+                        await confessionChannel.send({ 
+                            content: plainTextContent,
+                            components: emojiButtons
+                        });
+                    }
+
+                    await db.updateConfessionStatus(confessionId, 'approved', 'AI System', null, null, confessionNumber);
+                }
+            } else if (aiAnalysis) {
+                userMessage += `\n\n🤖 AI đã phân tích: ${aiAnalysis.safety_level} (${aiAnalysis.score}/10)`;
+            }
+
+            const successMsg = await message.channel.send(userMessage);
+            setTimeout(() => {
+                successMsg.delete().catch(() => {});
+            }, 8000);
+        } catch (error) {
+            console.error("Lỗi khi gửi confession:", error);
+            const errorMsg = await message.channel.send(
+                "❌ Đã xảy ra lỗi khi gửi confession!"
+            );
+            setTimeout(() => {
+                errorMsg.delete().catch(() => {});
+            }, 5000);
+        }
+    },
+}; 

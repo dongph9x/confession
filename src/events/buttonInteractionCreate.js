@@ -10,7 +10,7 @@ module.exports = {
         const { customId } = interaction;
         
         // Xử lý các button review confession
-        if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
+        if (customId.startsWith('confession_review_')) {
             try {
                 await handleConfessionReview(interaction, customId);
             } catch (error) {
@@ -240,8 +240,19 @@ async function handleConfessionReview(interaction, customId) {
         });
     }
 
-    const confessionId = customId.split('_')[1];
-    const action = customId.split('_')[0];
+    // Parse custom ID: confession_review_${confessionId}_${action}
+    const parts = customId.split('_');
+    if (parts.length !== 4) {
+        return interaction.reply({
+            content: "❌ Custom ID không hợp lệ!",
+            flags: 64 // Ephemeral flag
+        });
+    }
+
+    const confessionId = parts[2];
+    const action = parts[3]; // approve, reject, edit
+
+    console.log(`🔍 [REVIEW] Processing confession ${confessionId} with action ${action}`);
 
     try {
         // Defer update ngay từ đầu để tránh timeout
