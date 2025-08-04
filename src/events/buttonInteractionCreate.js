@@ -317,6 +317,29 @@ async function handleConfessionReview(interaction, customId) {
                 createConfessionThread
             } = require("../utils/forumChannel");
 
+            // Tạo AI review công khai
+            let aiReviewEmbed = null;
+            try {
+                const AIContentAnalyzer = require("../utils/aiContentAnalyzer");
+                const aiReview = await AIContentAnalyzer.createPublicReview(confession.content);
+                aiReviewEmbed = new EmbedBuilder()
+                    .setColor(0x00FF00)
+                    .setTitle(`🤖 ${aiReview.review_title}`)
+                    .setDescription(aiReview.review_content)
+                    .addFields(
+                        { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
+                        { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
+                        { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
+                    )
+                    .setFooter({
+                        text: `AI Expert Review • ${interaction.guild.name}`,
+                        iconURL: interaction.guild.iconURL(),
+                    })
+                    .setTimestamp();
+            } catch (reviewError) {
+                console.error('❌ [AI] Lỗi khi tạo public review:', reviewError);
+            }
+
             // Kiểm tra xem channel có phải là forum không
             if (isForumChannel(confessionChannel)) {
                 // Sử dụng forum channel
@@ -331,6 +354,11 @@ async function handleConfessionReview(interaction, customId) {
                     userId: confession.userId,
                     aiAnalysis: confession.aiAnalysis
                 });
+
+                // Gửi AI review vào thread
+                if (aiReviewEmbed) {
+                    await thread.send({ embeds: [aiReviewEmbed] });
+                }
 
                 console.log(`✅ [FORUM] Đã tạo thread cho confession #${confessionNumber} trong forum`);
 
@@ -351,6 +379,11 @@ async function handleConfessionReview(interaction, customId) {
                     content: plainTextContent,
                     components: emojiButtons
                 });
+
+                // Gửi AI review sau confession
+                if (aiReviewEmbed) {
+                    await confessionChannel.send({ embeds: [aiReviewEmbed] });
+                }
 
                 // Cập nhật confession với message ID
                 await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, null, confessionNumber);

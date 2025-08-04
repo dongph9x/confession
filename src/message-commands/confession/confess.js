@@ -275,6 +275,28 @@ module.exports = {
                         createConfessionThread
                     } = require("../../utils/forumChannel");
 
+                    // Tạo AI review công khai
+                    let aiReviewEmbed = null;
+                    try {
+                        const aiReview = await AIContentAnalyzer.createPublicReview(content);
+                        aiReviewEmbed = new EmbedBuilder()
+                            .setColor(0x00FF00)
+                            .setTitle(`🤖 ${aiReview.review_title}`)
+                            .setDescription(aiReview.review_content)
+                            .addFields(
+                                { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
+                                { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
+                                { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
+                            )
+                            .setFooter({
+                                text: `AI Expert Review • ${message.guild.name}`,
+                                iconURL: message.guild.iconURL(),
+                            })
+                            .setTimestamp();
+                    } catch (reviewError) {
+                        console.error('❌ [AI] Lỗi khi tạo public review:', reviewError);
+                    }
+
                     // Kiểm tra xem channel có phải là forum không
                     if (isForumChannel(confessionChannel)) {
                         // Sử dụng forum channel
@@ -290,6 +312,11 @@ module.exports = {
                             aiAnalysis: aiAnalysis
                         });
 
+                        // Gửi AI review vào thread
+                        if (aiReviewEmbed) {
+                            await thread.send({ embeds: [aiReviewEmbed] });
+                        }
+
                         console.log(`✅ [FORUM] Đã tạo thread cho confession #${confessionNumber} trong forum`);
                     } else {
                         // Sử dụng channel thông thường (fallback)
@@ -301,10 +328,15 @@ module.exports = {
                         const emojiCounts = await db.getEmojiCounts(message.guild.id, confessionId);
                         const emojiButtons = createEmojiButtons(emojiCounts);
 
-                        await confessionChannel.send({ 
+                        const confessionMessage = await confessionChannel.send({ 
                             content: plainTextContent,
                             components: emojiButtons
                         });
+
+                        // Gửi AI review sau confession
+                        if (aiReviewEmbed) {
+                            await confessionChannel.send({ embeds: [aiReviewEmbed] });
+                        }
                     }
 
                     await db.updateConfessionStatus(confessionId, 'approved', 'AI System', null, null, confessionNumber);

@@ -140,6 +140,91 @@ TRẢ LỜI THEO FORMAT JSON:
             throw new Error(result.error || 'AI analysis failed');
         }
     }
+
+    // Method để tạo đánh giá chuyên nghiệp công khai
+    async createPublicReview(content, guildName = 'Discord Server') {
+        try {
+            const prompt = `Bạn là một chuyên gia tâm lý và nhà phân tích nội dung chuyên nghiệp. Hãy đánh giá confession sau đây một cách công khai và chuyên nghiệp:
+
+NỘI DUNG CONFESSION:
+"${content}"
+
+YÊU CẦU:
+1. Đánh giá nội dung một cách chuyên nghiệp và khách quan
+2. Đưa ra nhận xét về tâm lý, cảm xúc, và ý nghĩa của confession
+3. Gợi ý cách ứng xử hoặc lời khuyên nếu cần thiết
+4. Viết bằng giọng điệu thân thiện, hiểu biết và chuyên nghiệp
+5. Không tiết lộ thông tin cá nhân hoặc nhận dạng người gửi
+
+HƯỚNG DẪN ĐÁNH GIÁ:
+- Nếu nội dung tích cực: Khuyến khích và động viên
+- Nếu nội dung tiêu cực: Đưa ra lời khuyên và gợi ý cách cải thiện
+- Nếu nội dung nhạy cảm: Thể hiện sự hiểu biết và đồng cảm
+- Nếu nội dung có vấn đề: Đưa ra lời khuyên mang tính xây dựng
+
+TRẢ LỜI THEO FORMAT JSON:
+{
+    "review_title": "Tiêu đề đánh giá",
+    "review_content": "Nội dung đánh giá chi tiết và chuyên nghiệp",
+    "emotional_tone": "TONE_POSITIVE|TONE_NEUTRAL|TONE_CONCERNED|TONE_SUPPORTIVE",
+    "suggestions": "Lời khuyên hoặc gợi ý nếu có",
+    "rating": "EXCELLENT|GOOD|AVERAGE|NEEDS_IMPROVEMENT"
+}`;
+
+            const response = await this.openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    {
+                        role: "system",
+                        content: "Bạn là một chuyên gia tâm lý và nhà phân tích nội dung chuyên nghiệp. Hãy đánh giá confession một cách công khai, chuyên nghiệp và mang tính xây dựng. Luôn thể hiện sự hiểu biết, đồng cảm và đưa ra lời khuyên hữu ích."
+                    },
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                temperature: 0.7, // Tăng temperature để có giọng điệu tự nhiên hơn
+                max_tokens: 800
+            });
+
+            const result = response.choices[0].message.content;
+            
+            // Parse JSON response
+            try {
+                const review = JSON.parse(result);
+                return {
+                    success: true,
+                    review: review
+                };
+            } catch (parseError) {
+                console.error('Error parsing AI review response:', parseError);
+                return {
+                    success: false,
+                    error: 'Failed to parse AI review response',
+                    rawResponse: result
+                };
+            }
+
+        } catch (error) {
+            console.error('AI Review Error:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Static method để tạo public review
+    static async createPublicReview(content) {
+        const analyzer = new AIContentAnalyzer();
+        const result = await analyzer.createPublicReview(content);
+        
+        if (result.success) {
+            return result.review;
+        } else {
+            throw new Error(result.error || 'AI review failed');
+        }
+    }
 }
 
 module.exports = AIContentAnalyzer; 
