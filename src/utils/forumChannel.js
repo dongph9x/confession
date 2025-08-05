@@ -95,9 +95,9 @@ async function createConfessionThread(forumChannel, confessionData) {
         let threadContent = `📢 **Confession #${confessionNumber}**\n\n${content}\n\n👤 **Người gửi:** ${authorString}\n⏰ **Thời gian:** ${timeString}\n\n*Confession Bot • ${guildName}*`;
 
         // Thêm thông tin AI nếu có
-        if (aiAnalysis) {
-            threadContent += `\n\n🤖 **AI Analysis:**\n📊 **Score:** ${aiAnalysis.score}/10\n🛡️ **Safety Level:** ${aiAnalysis.safety_level}\n📝 **Content Type:** ${aiAnalysis.content_type}`;
-        }
+        // if (aiAnalysis) {
+        //     threadContent += `\n\n🤖 **AI Analysis:**\n📊 **Score:** ${aiAnalysis.score}/10\n🛡️ **Safety Level:** ${aiAnalysis.safety_level}\n📝 **Content Type:** ${aiAnalysis.content_type}`;
+        // }
 
         // Xác định tags
         const appliedTags = [];

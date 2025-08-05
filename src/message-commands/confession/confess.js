@@ -135,12 +135,12 @@ module.exports = {
                         aiAnalysis = analysis.analysis;
                         
                         // Tạo embed cho AI analysis
-                        const summary = await analyzer.getAnalysisSummary(analysis);
-                        aiEmbed = new EmbedBuilder()
-                            .setColor(summary.color)
-                            .setTitle(`${summary.emoji} ${summary.title}`)
-                            .setDescription(summary.description)
-                            .setTimestamp();
+                        // const summary = await analyzer.getAnalysisSummary(analysis);
+                        // aiEmbed = new EmbedBuilder()
+                        //     .setColor(summary.color)
+                        //     .setTitle(`${summary.emoji} ${summary.title}`)
+                        //     .setDescription(summary.description)
+                        //     .setTimestamp();
 
                         // Tự động xử lý dựa trên AI recommendation
                         if (aiAnalysis.recommendation === 'REJECT') {
@@ -283,11 +283,11 @@ module.exports = {
                             .setColor(0x00FF00)
                             .setTitle(`🤖 ${aiReview.review_title}`)
                             .setDescription(aiReview.review_content)
-                            .addFields(
-                                { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
-                                { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
-                                { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
-                            )
+                            // .addFields(
+                            //     { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
+                            //     { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
+                            //     { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
+                            // )
                             .setFooter({
                                 text: `AI Expert Review • ${message.guild.name}`,
                                 iconURL: message.guild.iconURL(),

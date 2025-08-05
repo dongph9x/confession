@@ -245,11 +245,11 @@ module.exports = {
                             .setColor(0x00FF00)
                             .setTitle(`🤖 ${aiReview.review_title}`)
                             .setDescription(aiReview.review_content)
-                            .addFields(
-                                { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
-                                { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
-                                { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
-                            )
+                            // .addFields(
+                            //     { name: "💡 Gợi ý", value: aiReview.suggestions || "Không có", inline: false },
+                            //     { name: "⭐ Đánh giá", value: aiReview.rating, inline: true },
+                            //     { name: "🎭 Tông điệu", value: aiReview.emotional_tone, inline: true }
+                            // )
                             .setFooter({
                                 text: `AI Expert Review • ${message.guild.name}`,
                                 iconURL: message.guild.iconURL(),

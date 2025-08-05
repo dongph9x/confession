@@ -85,12 +85,12 @@ module.exports = {
                         aiAnalysis = analysis.analysis;
                         
                         // Tạo embed cho AI analysis
-                        const summary = await analyzer.getAnalysisSummary(analysis);
-                        aiEmbed = new EmbedBuilder()
-                            .setColor(summary.color)
-                            .setTitle(`${summary.emoji} ${summary.title}`)
-                            .setDescription(summary.description)
-                            .setTimestamp();
+                        // const summary = await analyzer.getAnalysisSummary(analysis);
+                        // aiEmbed = new EmbedBuilder()
+                        //     .setColor(summary.color)
+                        //     .setTitle(`${summary.emoji} ${summary.title}`)
+                        //     .setDescription(summary.description)
+                        //     .setTimestamp();
 
                         // Tự động xử lý dựa trên AI recommendation
                         if (aiAnalysis.recommendation === 'REJECT') {

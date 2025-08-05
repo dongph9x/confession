@@ -69,7 +69,7 @@ module.exports = {
             console.log(`✅ Đã thêm comment: "${content.substring(0, 30)}..." cho confession #${confessionNumber} bởi ${username}`);
             
             // Gửi confirmation message (optional)
-            await message.react('✅');
+            // await message.react('✅');
             
         } catch (error) {
             console.error('❌ Error handling thread message:', error);
