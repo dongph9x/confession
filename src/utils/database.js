@@ -67,7 +67,12 @@ const initDatabase = async () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id TEXT NOT NULL,
                 content TEXT NOT NULL,
+                author_id TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
+                is_anonymous INTEGER DEFAULT 0,
+                ai_analysis TEXT,
+                message_id TEXT,
+                confession_number INTEGER,
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 review_message_id TEXT,
                 confession_message_id TEXT,
@@ -82,7 +87,85 @@ const initDatabase = async () => {
     }
 };
 
+// Helper functions cho confession
+const confessionHelpers = {
+    // Thêm confession mới
+    async addConfession(guildId, authorId, content, isAnonymous = false) {
+        const result = await dbAsync.run(
+            "INSERT INTO confessions (guild_id, author_id, content, is_anonymous) VALUES (?, ?, ?, ?)",
+            [guildId, authorId, content, isAnonymous ? 1 : 0]
+        );
+        return result.lastID;
+    },
+
+    // Lấy pending confessions của user
+    async getUserPendingConfessions(guildId, userId) {
+        return await dbAsync.all(
+            "SELECT * FROM confessions WHERE guild_id = ? AND author_id = ? AND status = 'pending' ORDER BY created_at ASC",
+            [guildId, userId]
+        );
+    },
+
+    // Lấy guild settings
+    async getGuildSettings(guildId) {
+        return await dbAsync.get(
+            "SELECT * FROM guild_configs WHERE guild_id = ?",
+            [guildId]
+        );
+    },
+
+    // Cập nhật trạng thái confession
+    async updateConfessionStatus(confessionId, status, reviewerId = null, messageId = null, threadId = null, confessionNumber = null) {
+        const updates = [];
+        const params = [];
+        
+        updates.push("status = ?");
+        params.push(status);
+        
+        if (messageId) {
+            updates.push("message_id = ?");
+            params.push(messageId);
+        }
+        
+        if (confessionNumber) {
+            updates.push("confession_number = ?");
+            params.push(confessionNumber);
+        }
+        
+        params.push(confessionId);
+        
+        await dbAsync.run(
+            `UPDATE confessions SET ${updates.join(", ")} WHERE id = ?`,
+            params
+        );
+    },
+
+    // Lấy số lượng confessions đã approved
+    async getApprovedConfessionsCount(guildId) {
+        const result = await dbAsync.get(
+            "SELECT COUNT(*) as count FROM confessions WHERE guild_id = ? AND status = 'approved'",
+            [guildId]
+        );
+        return result ? result.count : 0;
+    },
+
+    // Lấy emoji counts
+    async getEmojiCounts(guildId, confessionId) {
+        // Placeholder - có thể implement sau
+        return {};
+    },
+
+    // Lưu AI analysis
+    async saveAIAnalysis(confessionId, aiAnalysis) {
+        await dbAsync.run(
+            "UPDATE confessions SET ai_analysis = ? WHERE id = ?",
+            [JSON.stringify(aiAnalysis), confessionId]
+        );
+    }
+};
+
 module.exports = {
     db: dbAsync,
     init: initDatabase,
+    ...confessionHelpers,
 };

@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
 const db = require("../data/mongodb");
 const { getEmojiKeyFromCustomId, updateEmojiButtons } = require("../utils/emojiButtons");
 
@@ -15,6 +15,22 @@ module.exports = {
                 await handleConfessionReview(interaction, customId);
             } catch (error) {
                 console.error('Lỗi khi xử lý review confession:', error);
+            }
+        }
+        // Xử lý button tạo confession
+        else if (customId === "create_confession_button") {
+            try {
+                await handleCreateConfessionButton(interaction);
+            } catch (error) {
+                console.error('Lỗi khi xử lý button tạo confession:', error);
+            }
+        }
+        // Xử lý button chọn loại confession
+        else if (customId === "confession_type_public" || customId === "confession_type_anonymous") {
+            try {
+                await handleConfessionTypeSelection(interaction, customId);
+            } catch (error) {
+                console.error('Lỗi khi xử lý chọn loại confession:', error);
             }
         }
         // Xử lý emoji buttons
@@ -660,5 +676,104 @@ async function handleAIReject(interaction, customId) {
             content: "❌ Đã xảy ra lỗi khi xử lý AI reject!",
             flags: 64
         });
+    }
+}
+
+// Function xử lý chọn loại confession
+async function handleConfessionTypeSelection(interaction, customId) {
+    try {
+        const isAnonymous = customId === "confession_type_anonymous";
+        
+        // Tạo modal cho nội dung confession
+        const modal = new ModalBuilder()
+            .setCustomId("confession_modal")
+            .setTitle(`📝 Tạo Confession ${isAnonymous ? '(Ẩn danh)' : '(Công khai)'}`);
+
+        // Input cho nội dung
+        const contentInput = new TextInputBuilder()
+            .setCustomId("confession_content")
+            .setLabel("Nội dung confession")
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder("Nhập nội dung confession của bạn...")
+            .setMaxLength(2000)
+            .setRequired(true);
+
+        // Input ẩn cho loại confession (để truyền thông tin)
+        const typeInput = new TextInputBuilder()
+            .setCustomId("confession_type")
+            .setLabel("Loại confession")
+            .setStyle(TextInputStyle.Short)
+            .setValue(isAnonymous ? "anonymous" : "public")
+            .setRequired(true);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(contentInput);
+        const secondActionRow = new ActionRowBuilder().addComponents(typeInput);
+
+        modal.addComponents(firstActionRow, secondActionRow);
+
+        await interaction.showModal(modal);
+
+    } catch (error) {
+        console.error("Lỗi khi tạo modal confession:", error);
+        try {
+            await interaction.reply({
+                content: "❌ Đã xảy ra lỗi khi tạo form confession!",
+                ephemeral: true
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
+    }
+}
+
+// Function xử lý button tạo confession
+async function handleCreateConfessionButton(interaction) {
+    try {
+        // Tạo embed hướng dẫn
+        const embed = new EmbedBuilder()
+            .setColor(0x00FF00)
+            .setTitle("📝 Tạo Confession")
+            .setDescription("Chọn loại confession bạn muốn gửi:")
+            .addFields(
+                { name: "👤 Công khai", value: "Confession sẽ hiển thị tên của bạn", inline: true },
+                { name: "🕵️ Ẩn danh", value: "Confession sẽ được đăng ẩn danh", inline: true }
+            )
+            .setFooter({
+                text: `Confession Bot • ${interaction.guild.name}`,
+                iconURL: interaction.guild.iconURL(),
+            })
+            .setTimestamp();
+
+        // Tạo buttons để chọn loại confession
+        const buttons = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId("confession_type_public")
+                    .setLabel(" Công khai")
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji("👤"),
+                new ButtonBuilder()
+                    .setCustomId("confession_type_anonymous")
+                    .setLabel(" Ẩn danh")
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji("🕵️")
+            );
+
+        await interaction.reply({
+            embeds: [embed],
+            components: [buttons],
+            ephemeral: true
+        });
+
+    } catch (error) {
+        console.error("Lỗi khi tạo confession type selection:", error);
+        try {
+            await interaction.reply({
+                content: "❌ Đã xảy ra lỗi khi tạo form confession!",
+                ephemeral: true
+            });
+        } catch (replyError) {
+            console.error("Không thể reply interaction:", replyError.message);
+        }
     }
 } 
