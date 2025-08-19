@@ -16,13 +16,23 @@ module.exports = {
         await messageHandler.handleMessage(message);
 
         // Kiểm tra confession reminder
-        await handleConfessionReminder(message);
+        try {
+            await handleConfessionReminder(message);
+        } catch (error) {
+            console.error("❌ [REMINDER] Uncaught error:", error);
+        }
     },
 };
 
 async function handleConfessionReminder(message) {
     // Kiểm tra xem có phải confession channel không
-    const guildSettings = await db.getGuildSettings(message.guild.id);
+    let guildSettings = null;
+    try {
+        guildSettings = await db.getGuildSettings(message.guild.id);
+    } catch (err) {
+        console.warn("getGuildSettings failed during reminder; skipping reminder.");
+        return;
+    }
     if (!guildSettings?.confessionChannel) return;
 
     const confessionChannel = message.guild.channels.cache.get(guildSettings.confessionChannel);

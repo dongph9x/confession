@@ -33,10 +33,17 @@ class MessageCommandHandler {
     async handleMessage(message) {
         if (message.author.bot) return;
 
+        // Resolve prefix safely (Mongo might be down)
+        let prefix = "!";
+        try {
+            const guildSettings = await db.getGuildSettings(message.guild.id);
+            if (guildSettings?.prefix) prefix = guildSettings.prefix;
+        } catch (err) {
+            console.warn("getGuildSettings failed, using default prefix '!'", err?.message || err);
+        }
+
         // Handle bot mention
         if (message.mentions.has(message.client.user)) {
-            const guildSettings = await db.getGuildSettings(message.guild.id);
-            const prefix = guildSettings?.prefix || "!";
 
             return message.reply({
                 content:
@@ -45,9 +52,7 @@ class MessageCommandHandler {
             });
         }
 
-        // Get guild prefix
-        const guildSettings = await db.getGuildSettings(message.guild.id);
-        const prefix = guildSettings?.prefix || "!";
+        // Get guild prefix (already resolved above)
 
         if (!message.content.startsWith(prefix)) return;
 

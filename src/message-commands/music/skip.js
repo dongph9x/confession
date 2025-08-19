@@ -5,6 +5,14 @@ module.exports = {
     aliases: ["s"],
     description: "Bỏ qua bài hát hiện tại",
     async execute(message) {
+        const kazagumo = global.kazagumo;
+        if (!kazagumo) {
+            const errorMsg = await message.reply(
+                "❌ Tính năng nhạc đang được tắt trên bot này."
+            );
+            setTimeout(() => errorMsg.delete().catch(console.error), 5000);
+            return;
+        }
         const { channel } = message.member.voice;
 
         // Kiểm tra người dùng có trong voice channel không
@@ -16,7 +24,7 @@ module.exports = {
             return;
         }
 
-        const player = message.client.music.players.get(message.guild.id);
+        const player = kazagumo.players.get(message.guild.id);
 
         // Kiểm tra có đang phát nhạc không
         if (!player || !player.playing) {

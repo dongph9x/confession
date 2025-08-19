@@ -5,6 +5,14 @@ module.exports = {
     aliases: ["p"],
     description: "Phát nhạc từ YouTube hoặc Spotify",
     async execute(message, args) {
+        const kazagumo = global.kazagumo;
+        if (!kazagumo) {
+            const errorMsg = await message.reply(
+                "❌ Tính năng nhạc đang được tắt trên bot này."
+            );
+            setTimeout(() => errorMsg.delete().catch(console.error), 5000);
+            return;
+        }
         const { channel } = message.member.voice;
 
         // Kiểm tra người dùng có trong voice channel không
@@ -39,7 +47,7 @@ module.exports = {
 
         try {
             // Tìm và phát nhạc
-            const result = await message.client.music.search(query, {
+            const result = await kazagumo.search(query, {
                 requester: message.author,
             });
             if (!result.tracks.length) {
@@ -50,7 +58,7 @@ module.exports = {
                 return;
             }
 
-            const player = await message.client.music.createPlayer({
+            const player = await kazagumo.createPlayer({
                 guildId: message.guild.id,
                 textId: message.channel.id,
                 voiceId: channel.id,

@@ -5,7 +5,15 @@ module.exports = {
     aliases: ["q"],
     description: "Hiển thị danh sách phát hiện tại",
     async execute(message) {
-        const player = message.client.music.players.get(message.guild.id);
+        const kazagumo = global.kazagumo;
+        if (!kazagumo) {
+            const errorMsg = await message.reply(
+                "❌ Tính năng nhạc đang được tắt trên bot này."
+            );
+            setTimeout(() => errorMsg.delete().catch(console.error), 5000);
+            return;
+        }
+        const player = kazagumo.players.get(message.guild.id);
 
         // Kiểm tra có đang phát nhạc không
         if (!player || !player.playing) {
