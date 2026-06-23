@@ -86,6 +86,23 @@ class MongoDB {
         return settings ? settings.anonymousMode : false;
     }
 
+    // Welcome Methods
+    async setWelcomeSettings(guildId, fields) {
+        const GuildSettings = require('../models/GuildSettings');
+        // Chỉ set những field được cung cấp (bỏ qua undefined/null)
+        const update = {};
+        for (const [key, value] of Object.entries(fields)) {
+            if (value !== undefined && value !== null) {
+                update[`welcome.${key}`] = value;
+            }
+        }
+        return await GuildSettings.findOneAndUpdate(
+            { guildId },
+            { $set: update },
+            { upsert: true, new: true }
+        );
+    }
+
     // Confession Methods
     async addConfession(guildId, userId, content, isAnonymous = false) {
         const Confession = require('../models/Confession');
@@ -194,21 +211,6 @@ class MongoDB {
         ]);
 
         return stats[0] || { total: 0, pending: 0, approved: 0, rejected: 0 };
-    }
-
-    // Music Settings Methods
-    async getMusicSettings(guildId) {
-        const MusicSettings = require('../models/MusicSettings');
-        return await MusicSettings.findOne({ guildId });
-    }
-
-    async setMusicSettings(guildId, djRole, musicChannel) {
-        const MusicSettings = require('../models/MusicSettings');
-        return await MusicSettings.findOneAndUpdate(
-            { guildId },
-            { djRole, musicChannel },
-            { upsert: true, new: true }
-        );
     }
 
     // Reaction Methods

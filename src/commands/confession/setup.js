@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -31,8 +31,8 @@ module.exports = {
         if (action === "config") {
             // Hiển thị cấu hình hiện tại
             const settings = await db.getGuildSettings(interaction.guild.id);
-            const confessionChannel = settings.confession_channel ? `<#${settings.confession_channel}>` : "❌ Chưa thiết lập";
-            const reviewChannel = settings.review_channel ? `<#${settings.review_channel}>` : "❌ Chưa thiết lập";
+            const confessionChannel = settings?.confessionChannel ? `<#${settings.confessionChannel}>` : "❌ Chưa thiết lập";
+            const reviewChannel = settings?.reviewChannel ? `<#${settings.reviewChannel}>` : "❌ Chưa thiết lập";
 
             const configEmbed = new EmbedBuilder()
                 .setTitle("⚙️ Cấu hình Confession Bot")
@@ -40,7 +40,7 @@ module.exports = {
                 .addFields(
                     { name: "📝 Kênh Confession", value: confessionChannel, inline: true },
                     { name: "👨‍⚖️ Kênh Review", value: reviewChannel, inline: true },
-                    { name: "📊 Confession Counter", value: `${settings.confession_counter || 0}`, inline: true }
+                    { name: "📊 Confession Counter", value: `${settings?.confessionCounter || 0}`, inline: true }
                 )
                 .setFooter({ text: "Confession Bot • Facebook Style" })
                 .setTimestamp();

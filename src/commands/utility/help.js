@@ -14,11 +14,6 @@ module.exports = {
             )
             .addFields(
                 {
-                    name: "🎵 Nhạc",
-                    value: "`/play` - Phát nhạc\n`/skip` - Bỏ qua bài hát\n`/stop` - Dừng phát nhạc\n`/repeat` - Lặp lại bài hát",
-                    inline: false,
-                },
-                {
                     name: "💌 Confession",
                     value: "`!confess` - Gửi confession ẩn danh\n`!setreview` - Đặt kênh kiểm duyệt\n`/setconfess` - Đặt kênh hiển thị confession",
                     inline: false,

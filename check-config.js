@@ -6,8 +6,10 @@ console.log('🔍 Checking Confession Bot Configuration...\n');
 console.log('📋 Environment Variables:');
 console.log(`BOT_TOKEN: ${process.env.BOT_TOKEN ? '✅ Set' : '❌ Missing'}`);
 console.log(`CLIENT_ID: ${process.env.CLIENT_ID ? '✅ Set' : '❌ Missing'}`);
-console.log(`LAVALINK_URL: ${process.env.LAVALINK_URL ? '✅ Set' : '⚠️ Optional'}`);
-console.log(`LAVALINK_AUTH: ${process.env.LAVALINK_AUTH ? '✅ Set' : '⚠️ Optional'}\n`);
+console.log(`MONGO_USERNAME: ${process.env.MONGO_USERNAME ? '✅ Set' : '⚠️ Dùng default (admin)'}`);
+console.log(`MONGO_PASSWORD: ${process.env.MONGO_PASSWORD ? '✅ Set' : '⚠️ Dùng default'}`);
+console.log(`MONGO_DATABASE: ${process.env.MONGO_DATABASE ? '✅ Set' : '⚠️ Dùng default (confession_bot)'}`);
+console.log('ℹ️  MONGODB_URI: docker-compose tự dựng (chỉ cần set thủ công nếu chạy npm start)\n');
 
 // Kiểm tra dependencies
 console.log('📦 Dependencies:');
@@ -21,10 +23,10 @@ try {
 // Kiểm tra database
 console.log('\n🗄️ Database:');
 try {
-    const db = require('./src/data/database');
-    console.log('✅ Database module found');
+    require('./src/data/mongodb');
+    console.log('✅ MongoDB module found');
 } catch (error) {
-    console.log('❌ Database module not found:', error.message);
+    console.log('❌ MongoDB module not found:', error.message);
 }
 
 // Kiểm tra commands

@@ -25,6 +25,21 @@ const guildSettingsSchema = new mongoose.Schema({
     anonymousMode: {
         type: Boolean,
         default: false
+    },
+    welcome: {
+        enabled: { type: Boolean, default: true },
+        channelId: { type: String, default: null },
+        defaultRoleId: { type: String, default: null },
+        message: {
+            type: String,
+            default: 'Chào mừng {user} đã đến với **{server}**!\nServer của chúng ta hiện có {memberCount} thành viên!'
+        },
+        embedColor: { type: String, default: '#00ff00' },
+        embedTitle: { type: String, default: '🎉 Chào mừng thành viên mới!' },
+        bannerUrl: { type: String, default: null },
+        showTimestamp: { type: Boolean, default: true },
+        showMemberCount: { type: Boolean, default: true },
+        showAccountAge: { type: Boolean, default: true }
     }
 }, {
     timestamps: true

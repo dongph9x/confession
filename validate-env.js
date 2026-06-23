@@ -15,10 +15,7 @@ const optionalVars = [
     'MONGO_PASSWORD', 
     'MONGO_DATABASE',
     'MONGO_PORT',
-    'MONGODB_URI',
-    'LAVALINK_URL',
-    'LAVALINK_AUTH',
-    'LAVALINK_PORT'
+    'MONGODB_URI'
 ];
 
 let hasErrors = false;
@@ -84,14 +81,6 @@ if (mongoPort && (isNaN(mongoPort) || mongoPort < 1 || mongoPort > 65535)) {
     console.log('✅ MONGO_PORT: Valid port');
 }
 
-const lavalinkPort = process.env.LAVALINK_PORT;
-if (lavalinkPort && (isNaN(lavalinkPort) || lavalinkPort < 1 || lavalinkPort > 65535)) {
-    console.log('❌ LAVALINK_PORT: Invalid port number');
-    hasErrors = true;
-} else if (lavalinkPort) {
-    console.log('✅ LAVALINK_PORT: Valid port');
-}
-
 console.log('\n📊 Summary:');
 if (hasErrors) {
     console.log('❌ Environment validation failed. Please fix the errors above.');
@@ -103,7 +92,6 @@ if (hasErrors) {
 
 // Show Docker commands
 console.log('\n🐳 Docker Commands:');
-console.log('docker compose up -d mongodb bot          # Run bot with MongoDB');
-console.log('docker compose --profile music up -d      # Run with Lavalink');
+console.log('docker compose up -d                      # Run bot with MongoDB');
 console.log('docker compose logs -f bot               # View bot logs');
 console.log('docker compose down                      # Stop all services'); 

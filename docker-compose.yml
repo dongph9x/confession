@@ -34,8 +34,6 @@ services:
       - BOT_TOKEN=${BOT_TOKEN}
       - CLIENT_ID=${CLIENT_ID}
       - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password123}@mongodb:27017/${MONGO_DATABASE:-confession_bot}?authSource=admin
-      - LAVALINK_URL=${LAVALINK_URL:-localhost:2333}
-      - LAVALINK_AUTH=${LAVALINK_AUTH:-youshallnotpass}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -50,23 +48,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
-  # Optional: Lavalink Music Server
-  lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4
-    container_name: confession-lavalink
-    restart: unless-stopped
-    environment:
-      - SERVER_PORT=${LAVALINK_PORT:-2333}
-      - LAVALINK_SERVER_PASSWORD=${LAVALINK_AUTH:-youshallnotpass}
-    ports:
-      - "${LAVALINK_PORT:-2333}:2333"
-    volumes:
-      - ./lavalink-config.yml:/opt/Lavalink/application.yml
-    networks:
-      - confession-network
-    profiles:
-      - music
 
 volumes:
   mongodb_data:

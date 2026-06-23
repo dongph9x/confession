@@ -4,9 +4,6 @@ FROM node:18-alpine
 # Tạo thư mục làm việc
 WORKDIR /app
 
-# Cài đặt dependencies cần thiết cho build
-RUN apk add --no-cache python3 make g++
-
 # Copy package files
 COPY package*.json ./
 COPY yarn.lock ./

@@ -2,7 +2,6 @@ const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("dis
 const db = require("../data/mongodb");
 
 module.exports = {
-    name: "interactionCreate",
     async execute(interaction) {
         if (!interaction.isStringSelectMenu()) return;
 

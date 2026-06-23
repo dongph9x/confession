@@ -6,7 +6,6 @@ const { getEmojiKeyFromCustomId, updateEmojiButtons } = require("../utils/emojiB
 const processedInteractions = new Set();
 
 module.exports = {
-    name: "buttonInteractionCreate",
     async execute(interaction) {
         if (!interaction.isButton()) return;
 
@@ -250,11 +249,6 @@ async function handleConfessionReview(interaction, customId) {
                 autoArchiveDuration: 1440, // 24 giờ
                 reason: 'Thread cho confession'
             });
-
-            // Gửi tin nhắn chào mừng trong thread
-            // await thread.send({
-            //     content: `💬 **Bình luận Confession #${(await db.getGuildSettings(interaction.guild.id)).confession_counter}**\n\nHãy để lại cảm xúc và bình luận của bạn về confession này!`
-            // });
 
             // Cập nhật trạng thái trong database với message ID và thread ID
             const updatedConfession = await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);

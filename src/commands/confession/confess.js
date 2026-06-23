@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -18,7 +18,7 @@ module.exports = {
         const content = interaction.options.getString("noidung");
 
         const guildSettings = await db.getGuildSettings(interaction.guild.id);
-        if (!guildSettings?.review_channel) {
+        if (!guildSettings?.reviewChannel) {
             return interaction.editReply({
                 content:
                     "❌ Kênh review confession chưa được thiết lập! Hãy nhờ Admin sử dụng lệnh `/setreviewchannel`",
@@ -27,7 +27,7 @@ module.exports = {
         }
 
         const reviewChannel = interaction.guild.channels.cache.get(
-            guildSettings.review_channel
+            guildSettings.reviewChannel
         );
         if (!reviewChannel) {
             return interaction.editReply({

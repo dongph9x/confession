@@ -1,37 +1,31 @@
 const { Events, EmbedBuilder } = require("discord.js");
-const { db } = require("../utils/database");
+const db = require("../data/mongodb");
 
 module.exports = {
     name: Events.GuildMemberAdd,
     async execute(member) {
         try {
-            const guildConfig = await db.get(
-                "SELECT * FROM guild_configs WHERE guild_id = ?",
-                [member.guild.id]
-            );
+            const settings = await db.getGuildSettings(member.guild.id);
+            const welcome = settings?.welcome;
 
-            if (
-                !guildConfig ||
-                !guildConfig.welcome_enabled ||
-                !guildConfig.welcome_channel_id
-            ) {
+            if (!welcome || !welcome.enabled || !welcome.channelId) {
                 return;
             }
 
-            const welcomeMessage = guildConfig.welcome_message
+            const welcomeMessage = welcome.message
                 .replace("{user}", member)
                 .replace("{server}", member.guild.name)
                 .replace("{memberCount}", member.guild.memberCount);
 
             const welcomeEmbed = new EmbedBuilder()
-                .setColor(guildConfig.embed_color)
-                .setTitle(guildConfig.embed_title)
+                .setColor(welcome.embedColor)
+                .setTitle(welcome.embedTitle)
                 .setDescription(welcomeMessage)
                 .setThumbnail(
                     member.user.displayAvatarURL({ dynamic: true, size: 512 })
                 );
 
-            if (guildConfig.show_account_age) {
+            if (welcome.showAccountAge) {
                 welcomeEmbed.addFields({
                     name: "📅 Tài khoản được tạo",
                     value: `<t:${Math.floor(
@@ -41,7 +35,7 @@ module.exports = {
                 });
             }
 
-            if (guildConfig.show_member_count) {
+            if (welcome.showMemberCount) {
                 welcomeEmbed.addFields({
                     name: "👥 Tổng thành viên",
                     value: `${member.guild.memberCount}`,
@@ -49,26 +43,26 @@ module.exports = {
                 });
             }
 
-            if (guildConfig.banner_url) {
-                welcomeEmbed.setImage(guildConfig.banner_url);
+            if (welcome.bannerUrl) {
+                welcomeEmbed.setImage(welcome.bannerUrl);
             }
 
-            if (guildConfig.show_timestamp) {
+            if (welcome.showTimestamp) {
                 welcomeEmbed.setTimestamp();
             }
 
             welcomeEmbed.setFooter({ text: `ID: ${member.id}` });
 
             const welcomeChannel = member.guild.channels.cache.get(
-                guildConfig.welcome_channel_id
+                welcome.channelId
             );
             if (welcomeChannel) {
                 await welcomeChannel.send({ embeds: [welcomeEmbed] });
             }
 
-            if (guildConfig.default_role_id) {
+            if (welcome.defaultRoleId) {
                 try {
-                    await member.roles.add(guildConfig.default_role_id);
+                    await member.roles.add(welcome.defaultRoleId);
                 } catch (error) {
                     console.error("Lỗi khi gán role mặc định:", error);
                 }

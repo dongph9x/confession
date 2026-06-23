@@ -44,45 +44,38 @@ echo "✅ Kiểm tra môi trường hoàn tất"
 # Menu lựa chọn
 echo ""
 echo "Chọn hành động:"
-echo "1) 🚀 Chạy bot với MongoDB (không có music)"
-echo "2) 🎵 Chạy bot với MongoDB và Lavalink (có music)"
-echo "3) 🛑 Dừng tất cả services"
-echo "4) 🔄 Restart bot"
-echo "5) 📊 Xem logs"
-echo "6) 🧹 Xóa tất cả containers và volumes"
-echo "7) 🔧 Build lại image"
-echo "8) 📋 Xem status của services"
+echo "1) 🚀 Chạy bot với MongoDB"
+echo "2) 🛑 Dừng tất cả services"
+echo "3) 🔄 Restart bot"
+echo "4) 📊 Xem logs"
+echo "5) 🧹 Xóa tất cả containers và volumes"
+echo "6) 🔧 Build lại image"
+echo "7) 📋 Xem status của services"
 
-read -p "Nhập lựa chọn (1-8): " choice
+read -p "Nhập lựa chọn (1-7): " choice
 
 case $choice in
     1)
         echo "🚀 Khởi động bot với MongoDB..."
-        docker-compose up -d mongodb bot
+        docker-compose up -d
         echo "✅ Bot đã được khởi động!"
         echo "📊 Xem logs: docker-compose logs -f bot"
         ;;
     2)
-        echo "🎵 Khởi động bot với MongoDB và Lavalink..."
-        docker-compose --profile music up -d
-        echo "✅ Bot và Lavalink đã được khởi động!"
-        echo "📊 Xem logs: docker-compose logs -f"
-        ;;
-    3)
         echo "🛑 Dừng tất cả services..."
         docker-compose down
         echo "✅ Đã dừng tất cả services!"
         ;;
-    4)
+    3)
         echo "🔄 Restart bot..."
         docker-compose restart bot
         echo "✅ Bot đã được restart!"
         ;;
-    5)
+    4)
         echo "📊 Hiển thị logs..."
         docker-compose logs -f
         ;;
-    6)
+    5)
         echo "🧹 Xóa tất cả containers và volumes..."
         read -p "Bạn có chắc chắn muốn xóa tất cả? (y/N): " confirm
         if [[ $confirm == [yY] ]]; then
@@ -93,12 +86,12 @@ case $choice in
             echo "❌ Hủy bỏ."
         fi
         ;;
-    7)
+    6)
         echo "🔧 Build lại image..."
         docker-compose build --no-cache
         echo "✅ Image đã được build lại!"
         ;;
-    8)
+    7)
         echo "📋 Status của services:"
         docker-compose ps
         ;;

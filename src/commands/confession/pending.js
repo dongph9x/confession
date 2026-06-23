@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -34,12 +34,13 @@ module.exports = {
             const displayConfessions = pendingConfessions.slice(0, 10);
             
             for (const confession of displayConfessions) {
-                const user = await interaction.client.users.fetch(confession.user_id).catch(() => null);
+                const user = await interaction.client.users.fetch(confession.userId).catch(() => null);
                 const username = user ? user.username : "Unknown User";
-                
+                const idLabel = confession._id.toString().slice(-6);
+
                 embed.addFields({
-                    name: `📝 Confession #${confession.id}`,
-                    value: `**Nội dung:** ${confession.content.substring(0, 100)}${confession.content.length > 100 ? '...' : ''}\n**Người gửi:** ${username} (<@${confession.user_id}>)\n**Thời gian:** <t:${Math.floor(new Date(confession.created_at).getTime() / 1000)}:R>`,
+                    name: `📝 Confession #${idLabel}`,
+                    value: `**Nội dung:** ${confession.content.substring(0, 100)}${confession.content.length > 100 ? '...' : ''}\n**Người gửi:** ${username} (<@${confession.userId}>)\n**Thời gian:** <t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`,
                     inline: false
                 });
             }

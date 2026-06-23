@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
-const db = require("../../data/database");
+const db = require("../../data/mongodb");
 
 module.exports = {
     name: "help",
@@ -30,15 +30,6 @@ module.exports = {
                         `\`${prefix}setconfess\` - Thiết lập kênh confession\n` +
                         `\`${prefix}confess\` - Gửi confession ẩn danh\n` +
                         `\`${prefix}confessinfo\` - Xem thống kê confession`,
-                    inline: false,
-                },
-                {
-                    name: "🎵 Nhạc",
-                    value:
-                        `\`${prefix}play\` - Phát nhạc\n` +
-                        `\`${prefix}skip\` - Bỏ qua bài hát hiện tại\n` +
-                        `\`${prefix}queue\` - Xem danh sách phát\n` +
-                        `\`${prefix}stop\` - Dừng phát nhạc`,
                     inline: false,
                 }
             )
