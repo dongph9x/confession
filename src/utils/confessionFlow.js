@@ -71,10 +71,17 @@ async function publishConfession({ guild, client, confession, reviewerId = null 
     let thread; // thread để bình luận
 
     if (confessionChannel.type === ChannelType.GuildForum) {
-        // Kênh forum: tạo post (thread) với embed làm tin nhắn mở đầu
+        // Kênh forum: nội dung phải nằm ở phần TEXT của post (nếu chỉ có embed,
+        // Discord hiện preview là "Click to see attachment"). Embed chỉ giữ metadata.
+        const forumEmbed = EmbedBuilder.from(approvedEmbed).setDescription(null);
         thread = await confessionChannel.threads.create({
             name: `💝 Confession #${confessionNumber}`,
-            message: { embeds: [approvedEmbed], components: emojiButtons },
+            message: {
+                content: confession.content.slice(0, 2000),
+                embeds: [forumEmbed],
+                components: emojiButtons,
+                allowedMentions: { parse: [] }, // không ping ai từ nội dung
+            },
             reason: "Confession post",
         });
         message = await thread.fetchStarterMessage();

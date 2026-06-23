@@ -20,7 +20,7 @@ module.exports = {
             .setDescription(
                 "Bấm nút bên dưới để gửi confession của bạn.\n" +
                     "Sau khi nhập nội dung, bạn sẽ chọn **🕵️ Ẩn danh** hoặc **👤 Hiện tên**.\n\n" +
-                    "*Tối đa 1000 ký tự. Mọi confession đều được kiểm duyệt trước khi đăng.*"
+                    "*Tối đa 1000 ký tự. Mọi confession có thể sẽ cần kiểm duyệt trước khi đăng.*"
             )
             .setFooter({
                 text: `Confession Bot • ${interaction.guild.name}`,
