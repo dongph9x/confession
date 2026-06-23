@@ -4,12 +4,21 @@ const path = require('path');
 class Logger {
     constructor() {
         this.logDir = path.join(__dirname, '../logs');
-        this.ensureLogDirectory();
+        // Nếu không tạo/ghi được thư mục log thì tắt ghi file (chỉ log ra console)
+        this.fileLoggingEnabled = this.ensureLogDirectory();
     }
 
     ensureLogDirectory() {
-        if (!fs.existsSync(this.logDir)) {
-            fs.mkdirSync(this.logDir, { recursive: true });
+        try {
+            if (!fs.existsSync(this.logDir)) {
+                fs.mkdirSync(this.logDir, { recursive: true });
+            }
+            // Kiểm tra quyền ghi
+            fs.accessSync(this.logDir, fs.constants.W_OK);
+            return true;
+        } catch (error) {
+            console.warn(`[WARN] Không ghi được log ra file (${this.logDir}): ${error.message}. Chỉ log ra console.`);
+            return false;
         }
     }
 
@@ -18,6 +27,8 @@ class Logger {
     }
 
     writeToFile(level, message, data = null) {
+        if (!this.fileLoggingEnabled) return;
+
         const timestamp = this.getTimestamp();
         const logEntry = {
             timestamp,
@@ -28,8 +39,14 @@ class Logger {
 
         const logFile = path.join(this.logDir, `${new Date().toISOString().split('T')[0]}.log`);
         const logLine = JSON.stringify(logEntry) + '\n';
-        
-        fs.appendFileSync(logFile, logLine);
+
+        try {
+            fs.appendFileSync(logFile, logLine);
+        } catch (error) {
+            // Không để lỗi ghi log làm crash bot — tắt ghi file từ giờ
+            this.fileLoggingEnabled = false;
+            console.warn(`[WARN] Mất quyền ghi log file, chuyển sang chỉ log console: ${error.message}`);
+        }
     }
 
     info(message, data = null) {

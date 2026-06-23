@@ -38,9 +38,6 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
-      - ./src/logs:/app/src/logs
     networks:
       - confession-network
     healthcheck:
