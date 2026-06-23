@@ -1,6 +1,11 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
 const db = require("../data/mongodb");
 const { getEmojiKeyFromCustomId, updateEmojiButtons } = require("../utils/emojiButtons");
+const { submitConfessionForReview, publishConfession } = require("../utils/confessionFlow");
+const config = require("../config/bot");
+
+// Giới hạn ký tự cho form đăng confession
+const CONFESS_MAX_LENGTH = 1000;
 
 // Track processed interactions to prevent duplicates
 const processedInteractions = new Set();
@@ -27,8 +32,16 @@ module.exports = {
 
         const { customId } = interaction;
         
+        // Mở form đăng confession
+        if (customId === 'confess_open') {
+            await handleOpenConfessModal(interaction);
+        }
+        // Chốt chế độ ẩn danh và gửi confession
+        else if (customId === 'confess_submit_anon' || customId === 'confess_submit_public') {
+            await handleConfessSubmit(interaction, customId);
+        }
         // Xử lý các button review confession
-        if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
+        else if (customId.startsWith('approve_') || customId.startsWith('reject_') || customId.startsWith('edit_')) {
             await handleConfessionReview(interaction, customId);
         }
         // Xử lý emoji buttons
@@ -37,6 +50,88 @@ module.exports = {
         }
     },
 };
+
+// Mở modal nhập nội dung confession
+async function handleOpenConfessModal(interaction) {
+    const modal = new ModalBuilder()
+        .setCustomId("confess_modal")
+        .setTitle("📝 Đăng Confession");
+
+    const contentInput = new TextInputBuilder()
+        .setCustomId("confess_content")
+        .setLabel("Nội dung confession")
+        .setStyle(TextInputStyle.Paragraph)
+        .setMinLength(config.confession.minLength)
+        .setMaxLength(CONFESS_MAX_LENGTH)
+        .setRequired(true)
+        .setPlaceholder(`Nhập confession của bạn (tối đa ${CONFESS_MAX_LENGTH} ký tự)...`);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(contentInput)
+    );
+
+    try {
+        await interaction.showModal(modal);
+    } catch (error) {
+        console.error("Không thể mở modal confession:", error.message);
+    }
+}
+
+// Đọc nội dung từ embed xem trước, gắn chế độ ẩn danh và gửi đi duyệt
+async function handleConfessSubmit(interaction, customId) {
+    const isAnonymous = customId === "confess_submit_anon";
+    const content = interaction.message.embeds[0]?.description;
+
+    if (!content) {
+        return interaction.update({
+            content: "❌ Không đọc được nội dung confession. Vui lòng thử lại.",
+            embeds: [],
+            components: [],
+        });
+    }
+
+    try {
+        const result = await submitConfessionForReview({
+            guild: interaction.guild,
+            user: interaction.user,
+            content,
+            isAnonymous,
+            client: interaction.client,
+        });
+
+        if (!result.ok) {
+            return interaction.update({
+                content: `❌ ${result.error}`,
+                embeds: [],
+                components: [],
+            });
+        }
+
+        const modeNote = isAnonymous
+            ? "🕵️ Đăng ẩn danh."
+            : "👤 Hiển thị tên của bạn.";
+        const statusNote = result.requireReview
+            ? "✅ Confession của bạn đã được gửi để duyệt! Bạn sẽ được thông báo khi được duyệt hoặc từ chối."
+            : "✅ Confession của bạn đã được đăng!";
+
+        await interaction.update({
+            content: `${statusNote} ${modeNote}`,
+            embeds: [],
+            components: [],
+        });
+    } catch (error) {
+        console.error("Lỗi khi gửi confession từ modal:", error);
+        try {
+            await interaction.update({
+                content: "❌ Đã xảy ra lỗi khi gửi confession!",
+                embeds: [],
+                components: [],
+            });
+        } catch (_) {
+            // bỏ qua nếu không update được
+        }
+    }
+}
 
 async function handleEmojiButton(interaction, customId) {
     // Defer reply ngay lập tức để tránh timeout
@@ -184,86 +279,20 @@ async function handleConfessionReview(interaction, customId) {
             });
         }
 
-        const guildSettings = await db.getGuildSettings(interaction.guild.id);
-        
         if (action === 'approve') {
-            // Duyệt confession
-            const confessionChannel = interaction.guild.channels.cache.get(guildSettings.confessionChannel);
-            if (!confessionChannel) {
+            // Đăng confession (xử lý cả kênh text lẫn forum) qua helper dùng chung
+            const result = await publishConfession({
+                guild: interaction.guild,
+                client: interaction.client,
+                confession,
+                reviewerId: interaction.user.id,
+            });
+
+            if (!result.ok) {
                 return interaction.reply({
-                    content: "❌ Kênh confession chưa được thiết lập!",
+                    content: `❌ ${result.error}`,
                     flags: 64 // Ephemeral flag
                 });
-            }
-
-            // Lấy thông tin người gửi confession
-            const confessionAuthor = await interaction.client.users.fetch(confession.userId);
-            
-            // Kiểm tra chế độ ẩn danh từ confession
-            const isAnonymous = confession.isAnonymous;
-
-            // Tạo embed cho confession đã duyệt
-            const approvedEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle("💝 Confession #" + (guildSettings.confessionCounter + 1))
-                .setDescription(confession.content)
-                .addFields(
-                    { 
-                        name: "👤 Người gửi", 
-                        value: isAnonymous ? "🕵️ Ẩn danh" : `<@${confession.userId}>`, 
-                        inline: true 
-                    },
-                    { 
-                        name: "⏰ Thời gian", 
-                        value: `<t:${Math.floor(new Date(confession.createdAt).getTime() / 1000)}:R>`, 
-                        inline: true 
-                    }
-                )
-                .setFooter({
-                    text: `Confession Bot • ${interaction.guild.name}`,
-                    iconURL: interaction.guild.iconURL(),
-                })
-                .setTimestamp();
-
-            // Chỉ hiển thị author nếu không ở chế độ ẩn danh
-            if (!isAnonymous) {
-                approvedEmbed.setAuthor({
-                    name: confessionAuthor.username,
-                    iconURL: confessionAuthor.displayAvatarURL()
-                });
-            }
-
-            // Tạo emoji buttons
-            const { createEmojiButtons } = require("../utils/emojiButtons");
-            const emojiCounts = await db.getEmojiCounts(interaction.guild.id, confession._id);
-            const emojiButtons = createEmojiButtons(emojiCounts);
-
-            const message = await confessionChannel.send({ 
-                embeds: [approvedEmbed],
-                components: emojiButtons
-            });
-
-            // Tạo thread cho confession để người dùng có thể bình luận
-            const thread = await message.startThread({
-                name: `💬 Bình luận Confession #${guildSettings.confessionCounter + 1}`,
-                autoArchiveDuration: 1440, // 24 giờ
-                reason: 'Thread cho confession'
-            });
-
-            // Cập nhật trạng thái trong database với message ID và thread ID
-            const updatedConfession = await db.updateConfessionStatus(confessionId, 'approved', interaction.user.id, message.id, thread.id);
-            
-            // Kiểm tra xem update có thành công không
-            if (!updatedConfession || updatedConfession.status !== 'approved') {
-                console.error('Failed to update confession status');
-                // Xóa message đã gửi nếu update thất bại
-                try {
-                    await message.delete();
-                    await thread.delete();
-                } catch (deleteError) {
-                    console.error('Failed to delete message/thread:', deleteError.message);
-                }
-                return;
             }
 
             // Cập nhật embed gốc
@@ -302,22 +331,13 @@ async function handleConfessionReview(interaction, customId) {
 
             try {
                 await interaction.reply({
-                    content: `✅ Đã duyệt confession #${confessionId}!`,
+                    content: `✅ Đã duyệt và đăng confession #${result.confessionNumber}!`,
                     flags: 64 // Ephemeral flag
                 });
             } catch (replyError) {
                 console.error("Không thể reply interaction:", replyError.message);
             }
-
-            // Thông báo cho người gửi
-            try {
-                const user = await interaction.client.users.fetch(confession.userId);
-                await user.send({
-                    content: `🎉 Confession của bạn đã được duyệt và đăng lên server **${interaction.guild.name}**!`
-                });
-            } catch (error) {
-                console.log("Không thể gửi DM cho user:", error.message);
-            }
+            // (DM cho người gửi đã được xử lý trong publishConfession)
 
         } else if (action === 'reject') {
             // Từ chối confession

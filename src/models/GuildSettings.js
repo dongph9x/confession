@@ -26,6 +26,10 @@ const guildSettingsSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    requireReview: {
+        type: Boolean,
+        default: true
+    },
     welcome: {
         enabled: { type: Boolean, default: true },
         channelId: { type: String, default: null },

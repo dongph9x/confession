@@ -25,7 +25,8 @@ module.exports = {
             .addFields(
                 { name: "📝 Kênh Confession", value: confessionChannel, inline: true },
                 { name: "👨‍⚖️ Kênh Review", value: reviewChannel, inline: true },
-                { name: "📊 Confession Counter", value: `${settings?.confessionCounter || 0}`, inline: true }
+                { name: "📊 Confession Counter", value: `${settings?.confessionCounter || 0}`, inline: true },
+                { name: "🔍 Kiểm duyệt", value: (settings?.requireReview !== false) ? "✅ Bật (cần duyệt)" : "⚡ Tắt (đăng thẳng)", inline: true }
             )
             .setFooter({ text: "Confession Bot • Facebook Style" })
             .setTimestamp();

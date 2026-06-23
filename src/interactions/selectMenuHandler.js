@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require("discord.js");
 const db = require("../data/mongodb");
 
 module.exports = {
@@ -162,7 +162,7 @@ async function handleConfigSelectMenu(interaction) {
         } else {
             // Tạo select menu cho channels
             const channels = interaction.guild.channels.cache
-                .filter(channel => channel.type === 0) // Text channels only
+                .filter(channel => channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildForum) // Text + Forum
                 .map(channel => ({
                     label: `#${channel.name}`,
                     value: channel.id,

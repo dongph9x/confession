@@ -29,26 +29,40 @@ for (const folder of commandFolders) {
     }
 }
 
+if (!process.env.BOT_TOKEN || !process.env.CLIENT_ID) {
+    logger.error("Thiếu BOT_TOKEN hoặc CLIENT_ID trong môi trường — không thể deploy.");
+    process.exit(1);
+}
+
 const rest = new REST().setToken(process.env.BOT_TOKEN);
 
 (async () => {
     try {
-        logger.info(`Started refreshing ${commands.length} application (/) commands.`);
+        const guildId = process.env.GUILD_ID;
 
-        const data = await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: commands },
+        // Nếu có GUILD_ID → đăng ký theo guild (hiện NGAY LẬP TỨC, tiện test)
+        // Nếu không → đăng ký global (có thể mất tới ~1 giờ để hiện)
+        const route = guildId
+            ? Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId)
+            : Routes.applicationCommands(process.env.CLIENT_ID);
+
+        logger.info(
+            `Started refreshing ${commands.length} (/) commands ` +
+            (guildId ? `cho guild ${guildId} (hiện ngay).` : `global (có thể trễ tới 1 giờ).`)
         );
 
+        const data = await rest.put(route, { body: commands });
+
         logger.info(`Successfully reloaded ${data.length} application (/) commands.`);
-        
+
         // Log all deployed commands
         logger.info("Deployed commands:");
         commands.forEach(cmd => {
             logger.info(`  - /${cmd.name}: ${cmd.description}`);
         });
-        
+
     } catch (error) {
         logger.error("Error deploying commands:", error);
+        process.exit(1);
     }
 })(); 

@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require("discord.js");
 const db = require("../../data/mongodb");
 
 module.exports = {
@@ -59,7 +59,7 @@ module.exports = {
 
         // Tạo select menu cho channels
         const channels = message.guild.channels.cache
-            .filter(channel => channel.type === 0) // Text channels only
+            .filter(channel => channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildForum) // Text + Forum
             .map(channel => ({
                 label: `#${channel.name}`,
                 value: channel.id,

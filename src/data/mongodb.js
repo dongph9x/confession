@@ -86,6 +86,22 @@ class MongoDB {
         return settings ? settings.anonymousMode : false;
     }
 
+    async setRequireReview(guildId, enabled) {
+        const GuildSettings = require('../models/GuildSettings');
+        return await GuildSettings.findOneAndUpdate(
+            { guildId },
+            { requireReview: enabled },
+            { upsert: true, new: true }
+        );
+    }
+
+    async getRequireReview(guildId) {
+        const GuildSettings = require('../models/GuildSettings');
+        const settings = await GuildSettings.findOne({ guildId });
+        // Mặc định BẬT kiểm duyệt nếu chưa cấu hình
+        return settings ? settings.requireReview !== false : true;
+    }
+
     // Welcome Methods
     async setWelcomeSettings(guildId, fields) {
         const GuildSettings = require('../models/GuildSettings');

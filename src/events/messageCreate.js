@@ -22,9 +22,10 @@ module.exports = {
 async function handleThreadComment(message) {
     try {
         // Kiểm tra xem thread có phải là thread của confession không
+        // Khớp tên thread dạng "Confession #5" (cả kênh text lẫn forum post)
         const threadName = message.channel.name;
-        const confessionMatch = threadName.match(/confession-(\d+)/i);
-        
+        const confessionMatch = threadName.match(/confession\s*#?\s*(\d+)/i);
+
         if (!confessionMatch) return;
 
         const confessionNumber = parseInt(confessionMatch[1]);

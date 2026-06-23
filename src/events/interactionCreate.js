@@ -1,6 +1,7 @@
 const { Events } = require("discord.js");
 const buttonHandler = require("../interactions/buttonHandler");
 const selectMenuHandler = require("../interactions/selectMenuHandler");
+const modalHandler = require("../interactions/modalHandler");
 const logger = require("../utils/logger");
 
 module.exports = {
@@ -30,6 +31,12 @@ module.exports = {
             // Select menu interactions (setup/config)
             if (interaction.isStringSelectMenu()) {
                 await selectMenuHandler.execute(interaction);
+                return;
+            }
+
+            // Modal submit (form gửi confession)
+            if (interaction.isModalSubmit()) {
+                await modalHandler.execute(interaction);
                 return;
             }
         } catch (error) {
